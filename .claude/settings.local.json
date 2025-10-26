@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(supabase functions deploy:*)",
-      "Bash(npm run dev:*)"
+      "Bash(npm run dev:*)",
+      "Bash(git checkout:*)"
     ],
     "deny": [],
     "ask": []

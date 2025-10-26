@@ -13,6 +13,9 @@ import { handleCuratedListings } from './curated-listings-handler.ts';
 import { handleFavorites } from './favorites-handler.ts';
 import { handleHomepage } from './homepage-handler.ts';
 import { getSearchTagsHandler } from './search-tags-handler.ts';
+import { handleLocations } from './locations-handler.ts';
+import { handlePropertyTypes } from './property-types-handler.ts';
+import { handleLegal } from './legal-handler.ts';
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type'
@@ -62,6 +65,22 @@ const CONTENT_ROUTES = {
     type: 'favorites',
     handler: handleFavorites
   },
+  'ubicaciones': {
+    type: 'locations',
+    handler: handleLocations
+  },
+  'propiedades': {
+    type: 'property-types',
+    handler: handlePropertyTypes
+  },
+  'terminos-y-condiciones': {
+    type: 'legal-terms',
+    handler: (params: any) => handleLegal({ ...params, legalType: 'terms' })
+  },
+  'politicas-de-privacidad': {
+    type: 'legal-privacy',
+    handler: (params: any) => handleLegal({ ...params, legalType: 'privacy' })
+  },
   // INGLÉS
   'articles': {
     type: 'articles',
@@ -99,6 +118,22 @@ const CONTENT_ROUTES = {
     type: 'favorites',
     handler: handleFavorites
   },
+  'locations': {
+    type: 'locations',
+    handler: handleLocations
+  },
+  'property-types': {
+    type: 'property-types',
+    handler: handlePropertyTypes
+  },
+  'terms-and-conditions': {
+    type: 'legal-terms',
+    handler: (params: any) => handleLegal({ ...params, legalType: 'terms' })
+  },
+  'privacy-policy': {
+    type: 'legal-privacy',
+    handler: (params: any) => handleLegal({ ...params, legalType: 'privacy' })
+  },
   // FRANCÉS
   'temoignages': {
     type: 'testimonials',
@@ -127,6 +162,22 @@ const CONTENT_ROUTES = {
   'favoris': {
     type: 'favorites',
     handler: handleFavorites
+  },
+  'emplacements': {
+    type: 'locations',
+    handler: handleLocations
+  },
+  'types-de-proprietes': {
+    type: 'property-types',
+    handler: handlePropertyTypes
+  },
+  'termes-et-conditions': {
+    type: 'legal-terms',
+    handler: (params: any) => handleLegal({ ...params, legalType: 'terms' })
+  },
+  'politique-de-confidentialite': {
+    type: 'legal-privacy',
+    handler: (params: any) => handleLegal({ ...params, legalType: 'privacy' })
   }
 };
 // ============================================================================

@@ -331,12 +331,23 @@ const contactButtonText = language === 'es' ? 'Contáctanos' :
         // Guardar el evento para usarlo después
         deferredPrompt = e;
 
-        // Mostrar botón de instalación después de 10 segundos
+        // Mostrar botón de instalación después de 3 segundos (reducido para testing)
         setTimeout(() => {
           if (deferredPrompt) {
             showInstallPrompt();
           }
-        }, 10000);
+        }, 3000);
+      });
+
+      // DESARROLLO: Mostrar banner aunque no haya prompt disponible (solo para testing)
+      window.addEventListener('load', () => {
+        setTimeout(() => {
+          if (!deferredPrompt) {
+            console.log('⚠️ No PWA prompt disponible (necesita HTTPS en producción)');
+            // Mostrar banner de todas formas para que lo veas
+            showInstallPromptDemo();
+          }
+        }, 3000);
       });
 
       function showInstallPrompt() {
@@ -383,6 +394,30 @@ const contactButtonText = language === 'es' ? 'Contáctanos' :
           banner.remove();
         }
       };
+
+      // Función demo para mostrar banner en desarrollo
+      function showInstallPromptDemo() {
+        const banner = document.createElement('div');
+        banner.id = 'pwa-install-banner';
+        banner.innerHTML = `
+          <div style="position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 9999; max-width: 90%; width: 400px;">
+            <div style="background: linear-gradient(135deg, #f04e00 0%, #d94400 100%); color: white; padding: 16px 20px; border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.3); display: flex; align-items: center; gap: 16px;">
+              <div style="flex: 1;">
+                <div style="font-weight: 600; font-size: 16px; margin-bottom: 4px;">🚀 Instalar CLIC App</div>
+                <div style="font-size: 13px; opacity: 0.95;">Acceso rápido desde tu pantalla de inicio</div>
+              </div>
+              <button onclick="alert('En producción con HTTPS, esto instalará la app')" style="background: white; color: #f04e00; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 600; font-size: 14px; cursor: pointer; white-space: nowrap;">
+                Instalar
+              </button>
+              <button onclick="dismissInstallPrompt()" style="background: transparent; color: white; border: 1px solid rgba(255,255,255,0.3); padding: 10px 16px; border-radius: 8px; font-weight: 500; font-size: 14px; cursor: pointer;">
+                ✕
+              </button>
+            </div>
+          </div>
+        `;
+        document.body.appendChild(banner);
+        console.log('✅ Banner PWA demo mostrado');
+      }
 
       // Registrar Service Worker para caching y offline support
       if ('serviceWorker' in navigator) {

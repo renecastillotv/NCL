@@ -30,6 +30,9 @@ import VacationRentalsMainLayout from '../layouts/VacationRentalsMainLayout.astr
 import VacationRentalsDynamicLayout from '../layouts/VacationRentalsDynamicLayout.astro';
 import CuratedListingsLayout from '../layouts/CuratedListingsLayout.astro';
 import CuratedListingsSingleLayout from '../layouts/CuratedListingsSingleLayout.astro';
+import LocationsLayout from '../layouts/LocationsLayout.astro';
+import PropertyTypesLayout from '../layouts/PropertyTypesLayout.astro';
+import LegalLayout from '../layouts/LegalLayout.astro';
 import * as sitemapHandler from './sitemap.xml.js';
 import * as robotsHandler from './robots.txt.js';
 export const prerender = false;
@@ -63,10 +66,13 @@ const LANGUAGES = ['es', 'en', 'fr'];
 const SPECIAL_ROUTES = [
   'asesores','favoritos','testimonios','videos','articulos','contacto',
   'rentas-vacacionales','planes-rentas-vacacionales','vender','listados-de',
+  'ubicaciones','propiedades','terminos-y-condiciones','politicas-de-privacidad',
   'advisors','favorites','testimonials','articles','contact',
   'vacation-rentals','vacation-rental-plans','sell','listings-of',
+  'locations','property-types','terms-and-conditions','privacy-policy',
   'conseillers','favoris','temoignages','locations-vacances',
-  'plans-locations-vacances','vendre','listes-de'
+  'plans-locations-vacances','vendre','listes-de',
+  'emplacements','types-de-proprietes','termes-et-conditions','politique-de-confidentialite'
 ];
 
 const MAIN_BACKEND = 'https://pacewqgypevfgjmdsorz.supabase.co/functions/v1/backend';
@@ -160,7 +166,7 @@ async function callBackendOnce(backendBase: string, path: string) {
 }
 
 const backendUrl = useContent ? CONTENT_BACKEND : MAIN_BACKEND;
-const pageData = await callBackendOnce(backendUrl, backendPath);
+let pageData = await callBackendOnce(backendUrl, backendPath);
 pageData.language = language;
 
 const pageType = pageData.pageType || pageData.type || (
@@ -192,6 +198,10 @@ const showVacationRentalsPlans = pageType === 'vacation-rentals-plans';
 const showVacationRentalsDynamic = pageType === 'vacation-rentals-dynamic';
 const showCuratedListingsMain = pageType === 'curated-listings-main';
 const showCuratedListingsSingle = pageType === 'curated-listings-single';
+const showLocationsMain = pageType === 'locations-main';
+const showPropertyTypesMain = pageType === 'property-types-main';
+const showLegalTerms = pageType === 'legal-terms';
+const showLegalPrivacy = pageType === 'legal-privacy';
 const show404 = pageType === '404' || !pageType;
 ---
 
@@ -242,3 +252,11 @@ const show404 = pageType === '404' || !pageType;
 {showCuratedListingsMain && <CuratedListingsLayout data={pageData} language={pageData.language} />}
 
 {showCuratedListingsSingle && <CuratedListingsSingleLayout data={pageData} language={pageData.language} />}
+
+{showLocationsMain && <LocationsLayout data={pageData} language={pageData.language} />}
+
+{showPropertyTypesMain && <PropertyTypesLayout data={pageData} language={pageData.language} />}
+
+{showLegalTerms && <LegalLayout data={{...pageData, legalType: 'terms'}} language={pageData.language} />}
+
+{showLegalPrivacy && <LegalLayout data={{...pageData, legalType: 'privacy'}} language={pageData.language} />}
