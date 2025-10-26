@@ -817,3 +817,37 @@ console.log('✅ VideosSingleLayout preparado:', {
     color: #f04e00;
   }
 </style>
+
+<!-- VideoObject Schema for Rich Snippets -->
+<script type="application/ld+json" set:html={JSON.stringify({
+  "@context": "https://schema.org",
+  "@type": "VideoObject",
+  "name": safeVideoData.title,
+  "description": safeVideoData.description,
+  "thumbnailUrl": safeVideoData.thumbnail || `https://img.youtube.com/vi/${safeVideoData.videoId}/maxresdefault.jpg`,
+  "uploadDate": safeVideoData.publishedAt,
+  "duration": safeVideoData.duration ? `PT${safeVideoData.duration.replace(/:/g, 'M')}S`.replace('MS', 'S') : undefined,
+  "contentUrl": safeVideoData.platform === 'youtube'
+    ? `https://www.youtube.com/watch?v=${safeVideoData.videoId}`
+    : safeVideoData.url,
+  "embedUrl": safeVideoData.platform === 'youtube'
+    ? `https://www.youtube.com/embed/${safeVideoData.videoId}`
+    : undefined,
+  "interactionStatistic": {
+    "@type": "InteractionCounter",
+    "interactionType": { "@type": "WatchAction" },
+    "userInteractionCount": safeVideoData.views || 0
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "CLIC Inmobiliaria",
+    "logo": {
+      "@type": "ImageObject",
+      "url": `${Astro.url.origin}/images/logo-clic.png`
+    }
+  },
+  "author": {
+    "@type": "Person",
+    "name": safeVideoData.author?.name || "Equipo CLIC"
+  }
+}, null, 0)} />

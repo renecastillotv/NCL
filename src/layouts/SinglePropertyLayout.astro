@@ -460,6 +460,65 @@ console.log('Layout procesado con nueva estructura:', {
 
   <!-- JSON-LD Structured Data -->
   <script type="application/ld+json" set:html={JSON.stringify(seoData.structured_data || {})}></script>
+
+  <!-- Product Schema for Property (Rich Snippets) -->
+  <script type="application/ld+json">
+    {
+      JSON.stringify({
+        "@context": "https://schema.org",
+        "@type": "Product",
+        "name": property?.title_display || property?.name || "Propiedad",
+        "description": property?.description_display || property?.description || description,
+        "image": processedImages.final_images || [ogImage],
+        "brand": {
+          "@type": "Brand",
+          "name": "CLIC Inmobiliaria"
+        },
+        "offers": {
+          "@type": "Offer",
+          "price": property?.sale_price || property?.rental_price || 0,
+          "priceCurrency": property?.sale_currency || property?.rental_currency || "USD",
+          "availability": property?.property_status === 'Publicada' && property?.availability === 1
+            ? "https://schema.org/InStock"
+            : "https://schema.org/OutOfStock",
+          "url": `${Astro.url.origin}${Astro.url.pathname}`,
+          "priceValidUntil": new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          "seller": {
+            "@type": "Organization",
+            "name": "CLIC Inmobiliaria"
+          }
+        },
+        "category": property?.category_name || "Real Estate",
+        "additionalProperty": [
+          {
+            "@type": "PropertyValue",
+            "name": language === 'es' ? "Habitaciones" : language === 'en' ? "Bedrooms" : "Chambres",
+            "value": property?.bedrooms || 0
+          },
+          {
+            "@type": "PropertyValue",
+            "name": language === 'es' ? "Baños" : language === 'en' ? "Bathrooms" : "Salles de bain",
+            "value": property?.bathrooms || 0
+          },
+          {
+            "@type": "PropertyValue",
+            "name": language === 'es' ? "Área Construida" : language === 'en' ? "Built Area" : "Surface Construite",
+            "value": property?.built_area ? `${property.built_area} m²` : "N/A"
+          },
+          {
+            "@type": "PropertyValue",
+            "name": language === 'es' ? "Parqueos" : language === 'en' ? "Parking" : "Stationnement",
+            "value": property?.parking_spots || 0
+          }
+        ].filter(prop => prop.value && prop.value !== "N/A" && prop.value !== 0),
+        "aggregateRating": property?.reviews_count > 0 ? {
+          "@type": "AggregateRating",
+          "ratingValue": property?.average_rating || "4.8",
+          "reviewCount": property?.reviews_count || "1"
+        } : undefined
+      })
+    }
+  </script>
 </Layout>
 
 <!-- Estilos (mantener iguales) -->

@@ -628,7 +628,11 @@ function processArticle(article, language, trackingString, countryCode) {
   };
 }
 function processVideo(video, language, trackingString, countryCode) {
-  const slug = getSlugByLanguage(video, language, 'video_slug');
+  const rawSlug = getSlugByLanguage(video, language, 'video_slug');
+
+  // Limpiar el slug si ya viene con prefijo 'videos/'
+  const slug = rawSlug?.replace(/^videos\//, '') || rawSlug;
+
   let url = `videos/${slug}`;
   if (language !== 'es') url = `${language}/videos/${slug}`;
   // ✅ Obtener categoría correcta desde content_categories

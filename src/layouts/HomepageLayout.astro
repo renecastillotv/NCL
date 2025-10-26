@@ -356,40 +356,16 @@ const t = {
       </div>
     </div>
     
-    <!-- SEO Content - Simplified -->
-    <div class="sr-only">
-      <h1>{seoData.h1 || `${companyName} - ${language === 'es' ? 'Bienes Raíces Premium en' : language === 'en' ? 'Premium Real Estate in' : 'Immobilier Premium en'} ${countryName}`}</h1>
-      <p>{seoData.description}</p>
-      
-      {language === 'es' && (
-        <div>
-          <span>Propiedades de lujo en {countryName}, apartamentos premium, casas exclusivas, villas de ensueño</span>
-          <span>Inversión inmobiliaria {countryName}, oportunidades de negocio, bienes raíces rentables</span>
-          <span>Asesores inmobiliarios expertos, {processedAdvisors.length} especialistas certificados</span>
-          {shouldShowFounderStory && <span>René Castillo presentador TV, canal inmobiliario YouTube, 600k seguidores, CLIC Inmobiliaria fundador</span>}
-          {topCitiesText && <span>Especialidades: {topCitiesText}</span>}
-        </div>
-      )}
-      
-      <address>
-        <span>{founderName}, {shouldShowFounderStory ? 'Fundador y Presentador de TV' : 'Experto Inmobiliario Local'}</span>
-        <span>{companyName} - {globalConfig?.legal?.company_full_name}</span>
-        <span>{globalConfig?.contact?.address || `${countryName} Office`}</span>
-        <span>Teléfono: {globalConfig?.contact?.phone || 'Contact Available'}</span>
-        <span>Email: {globalConfig?.contact?.email || 'info@clic.com'}</span>
-      </address>
-    </div>
-    
-    <!-- Visual Content -->
+    <!-- Visual Content with proper H1 -->
     <div class="relative z-20 container mx-auto px-4">
       <div class="max-w-5xl mx-auto">
         <div class="text-center">
-          <h2 class="text-3xl md:text-4xl lg:text-5xl font-bold mb-5 text-white leading-tight">
-            {heroConfig.title || companyName}
-          </h2>
-          <h3 class="text-xl md:text-2xl lg:text-3xl font-bold mb-6 text-[#f04e00] leading-tight">
+          <h1 class="text-3xl md:text-4xl lg:text-5xl font-bold mb-5 text-white leading-tight">
+            {seoData.h1 || heroConfig.title || companyName}
+          </h1>
+          <h2 class="text-xl md:text-2xl lg:text-3xl font-bold mb-6 text-[#f04e00] leading-tight">
             {heroConfig.tagline}
-          </h3>
+          </h2>
           <p class="text-lg md:text-xl mb-10 text-white/90 leading-relaxed max-w-5xl mx-auto">
             {heroConfig.subtitle}
           </p>

@@ -864,3 +864,43 @@ console.log('✅ ArticlesSingleLayout preparado:', {
     transform: translateX(0.25rem);
   }
 </style>
+
+<!-- Article Schema for Rich Snippets -->
+<script type="application/ld+json" set:html={JSON.stringify({
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": safeArticle.title,
+  "alternativeHeadline": safeArticle.subtitle || undefined,
+  "description": safeArticle.excerpt,
+  "image": safeArticle.featuredImage,
+  "datePublished": safeArticle.publishedAt,
+  "dateModified": safeArticle.updatedAt || safeArticle.publishedAt,
+  "author": {
+    "@type": "Person",
+    "name": safeArticle.author.name,
+    "url": `${Astro.url.origin}/${language === 'es' ? '' : language + '/'}sobre-nosotros`
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "CLIC Inmobiliaria",
+    "logo": {
+      "@type": "ImageObject",
+      "url": `${Astro.url.origin}/images/logo-clic.png`
+    }
+  },
+  "mainEntityOfPage": {
+    "@type": "WebPage",
+    "@id": `${Astro.url.origin}${Astro.url.pathname}`
+  },
+  "articleSection": safeArticle.category,
+  "keywords": safeArticle.tags.join(', '),
+  "wordCount": Math.ceil(stripHtml(safeArticle.content).split(/\s+/).filter(word => word.length > 0).length),
+  "inLanguage": language === 'es' ? 'es-DO' : language === 'en' ? 'en-US' : 'fr-FR',
+  "isAccessibleForFree": true,
+  "interactionStatistic": {
+    "@type": "InteractionCounter",
+    "interactionType": { "@type": "ReadAction" },
+    "userInteractionCount": safeArticle.views || 0
+  },
+  "timeRequired": `PT${safeArticle.readTimeMinutes}M`
+}, null, 0)} />
