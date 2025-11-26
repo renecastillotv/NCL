@@ -1,0 +1,12 @@
+Hola! Voy a continuar un proyecto CRM. Te paso el context completo:
+
+1. [PEGAR PROJECT_CONTEXT.md]
+2. [PEGAR CÓDIGO ACTUAL del artifact]
+3. [PEGAR configuraciones específicas]
+
+Objetivos para esta sesión:
+- Crear módulo [NOMBRE] completo
+- Frontend + Backend + Funcionalidad
+- Mantener estándares establecidos
+
+¿Entendiste el contexto? ¿Empezamos con [MÓDULO ESPECÍFICO]?

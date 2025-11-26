@@ -1,0 +1,11 @@
+{
+  "name": "email-inbox",
+  "version": "1.0.0",
+  "type": "commonjs",
+  "main": "index.js",
+  "dependencies": {
+    "imapflow": "^1.0.0",
+    "mailparser": "3.7.2",
+    "nodemailer": "^6.9.8"
+  }
+}

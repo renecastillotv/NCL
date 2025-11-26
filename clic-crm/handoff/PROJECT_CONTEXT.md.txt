@@ -1,0 +1,24 @@
+# 🏢 CLIC CRM - Context Handoff
+
+## 🎯 PROYECTO
+- **Qué es:** CRM inmobiliario para CLIC
+- **Usuario:** René Castillo (rcastillo@clic.do)
+- **Stack:** React + Supabase + Tailwind
+- **Color brand:** #e03f07
+
+## 🏗️ ARQUITECTURA
+- **Frontend:** React SPA
+- **Backend:** Supabase (PostgreSQL + Auth + Storage)
+- **Estilo:** Sidebar navigation + modular design
+- **Patrón:** Módulos verticales independientes
+
+## ✅ COMPLETADO
+- Dashboard funcional
+- Sistema navegación
+- Autenticación base
+- Diseño UI/UX definido
+
+## 🎯 PRÓXIMO MÓDULO: [CONTACTOS]
+- **Objetivo:** CRUD completo de contactos
+- **Tablas:** contacts, contact_types, etc.
+- **Features:** Lista, crear, editar, buscar

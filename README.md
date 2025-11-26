@@ -1,47 +1,86 @@
-# Astro Starter Kit: Minimal
+# NCL - Repositorio de Proyectos CLIC
 
-```sh
-npm create astro@latest -- --template minimal
+Este repositorio contiene los proyectos principales de CLIC Inmobiliaria.
+
+## Estructura del Repositorio
+
+```
+NCL/
+├── clic-crm/           # Sistema CRM multi-tenant con React + Supabase
+└── astro-clic-project/ # Plataforma web pública con Astro
 ```
 
-[![Open in StackBlitz](https://developer.stackblitz.com/img/open_in_stackblitz.svg)](https://stackblitz.com/github/withastro/astro/tree/latest/examples/minimal)
-[![Open with CodeSandbox](https://assets.codesandbox.io/github/button-edit-lime.svg)](https://codesandbox.io/p/sandbox/github/withastro/astro/tree/latest/examples/minimal)
-[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/withastro/astro?devcontainer_path=.devcontainer/minimal/devcontainer.json)
+## Proyectos
 
-> 🧑‍🚀 **Seasoned astronaut?** Delete this file. Have fun!
+### 1. CLIC CRM (`/clic-crm`)
 
-## 🚀 Project Structure
+Sistema de gestión CRM multi-tenant desarrollado con React y Supabase.
 
-Inside of your Astro project, you'll see the following folders and files:
+**Características:**
+- Sistema multi-tenant con gestión de roles y permisos
+- Gestión de propiedades, contactos, usuarios y deals
+- Edge functions para autenticación y autorización
+- Arquitectura modular con hooks personalizados
+- Integración completa con Supabase
 
-```text
-/
-├── public/
-├── src/
-│   └── pages/
-│       └── index.astro
-└── package.json
+**Tecnologías:**
+- React 18
+- Supabase (Base de datos + Auth + Edge Functions)
+- Sistema de permisos granular
+- UI Components personalizados
+
+**Documentación:**
+- Ver [clic-crm/START-HERE.md](clic-crm/START-HERE.md) para comenzar
+- Arquitectura: [clic-crm/ARCHITECTURE_OVERVIEW.md](clic-crm/ARCHITECTURE_OVERVIEW.md)
+- Deploy: [clic-crm/DEPLOYMENT-CHECKLIST.md](clic-crm/DEPLOYMENT-CHECKLIST.md)
+
+---
+
+### 2. Astro CLIC (`/astro-clic-project`)
+
+Plataforma web pública para visualización de propiedades desarrollada con Astro.
+
+**Características:**
+- Sitio web estático/SSR con Astro
+- Búsqueda y filtrado de propiedades
+- SEO optimizado
+- Integración con Supabase para contenido dinámico
+- Optimización de imágenes
+
+**Tecnologías:**
+- Astro
+- Supabase
+- Tailwind CSS
+- Edge Functions
+
+**Documentación:**
+- Ver [astro-clic-project/README.md](astro-clic-project/README.md) para instalación
+- Deploy: [astro-clic-project/DEPLOY-INSTRUCTIONS.md](astro-clic-project/DEPLOY-INSTRUCTIONS.md)
+
+---
+
+## Instalación Rápida
+
+### CLIC CRM
+```bash
+cd clic-crm
+npm install
+# Configurar .env según .env.example
+npm start
 ```
 
-Astro looks for `.astro` or `.md` files in the `src/pages/` directory. Each page is exposed as a route based on its file name.
+### Astro CLIC
+```bash
+cd astro-clic-project
+npm install
+# Configurar .env según .env.example
+npm run dev
+```
 
-There's nothing special about `src/components/`, but that's where we like to put any Astro/React/Vue/Svelte/Preact components.
+## Contribución
 
-Any static assets, like images, can be placed in the `public/` directory.
+Ambos proyectos están en desarrollo activo. Para contribuir, ver la documentación específica de cada proyecto.
 
-## 🧞 Commands
+## Licencia
 
-All commands are run from the root of the project, from a terminal:
-
-| Command                   | Action                                           |
-| :------------------------ | :----------------------------------------------- |
-| `npm install`             | Installs dependencies                            |
-| `npm run dev`             | Starts local dev server at `localhost:4321`      |
-| `npm run build`           | Build your production site to `./dist/`          |
-| `npm run preview`         | Preview your build locally, before deploying     |
-| `npm run astro ...`       | Run CLI commands like `astro add`, `astro check` |
-| `npm run astro -- --help` | Get help using the Astro CLI                     |
-
-## 👀 Want to learn more?
-
-Feel free to check [our documentation](https://docs.astro.build) or jump into our [Discord server](https://astro.build/chat).
+Propiedad de CLIC Inmobiliaria

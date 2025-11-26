@@ -1,0 +1,13 @@
+{
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"path": "../astro-clic"
+		},
+		{
+			"path": "../astro-clic/src"
+		}
+	]
+}
