@@ -1,0 +1,828 @@
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type'
+};
+const GOOGLE_GEOCODING_API_KEY = 'AIzaSyCpzGsbg52e2HqFXCXA6_5alq2OYwVjvSU';
+const GOOGLE_REVERSE_GEOCODING_URL = 'https://maps.googleapis.com/maps/api/geocode/json';
+// Configuración optimizada
+const COUNTRY_CONFIGS = {
+  'DO': {
+    name: 'República Dominicana',
+    center: {
+      lat: 18.4861,
+      lng: -69.9312
+    },
+    bounds: {
+      north: 20,
+      south: 17,
+      east: -68,
+      west: -73
+    },
+    search_radius: {
+      country: 200,
+      province: 50,
+      city: 8,
+      sector: 1.5 // 1.5km - sector
+    },
+    language: 'es',
+    region: 'DO'
+  }
+};
+// Clase principal mejorada
+class ExactFlowLocationResolver {
+  constructor(supabase, countryConfig){
+    this.supabase = supabase;
+    this.countryConfig = countryConfig;
+  }
+  async resolveLocationFromPin(lat, lng, propertyId = null) {
+    console.log('🎯 === FLUJO EXACTO INICIADO ===');
+    console.log(`📍 Coordenadas: ${lat}, ${lng}`);
+    try {
+      // PASO 1: Obtener información completa de Google
+      const googleHierarchy = await this.getGoogleHierarchy(lat, lng);
+      if (!googleHierarchy.success) {
+        throw new Error('Error en geocodificación de Google');
+      }
+      console.log('🌍 Google detectó:', this.logGoogleHierarchy(googleHierarchy));
+      // PASO 2: Buscar cercanía en base de datos
+      const nearbyAnalysis = await this.findNearbyWithAnalysis(lat, lng, googleHierarchy);
+      // PASO 3: Procesar según resultado de cercanía
+      return await this.processProximityResult(nearbyAnalysis, googleHierarchy, {
+        lat,
+        lng
+      }, propertyId);
+    } catch (error) {
+      console.error('❌ Error en flujo exacto:', error);
+      throw error;
+    }
+  }
+  async getGoogleHierarchy(lat, lng) {
+    const url = `${GOOGLE_REVERSE_GEOCODING_URL}?latlng=${lat},${lng}&key=${GOOGLE_GEOCODING_API_KEY}&language=${this.countryConfig.language}&region=${this.countryConfig.region}`;
+    try {
+      const response = await fetch(url);
+      const data = await response.json();
+      if (data.status === 'OK' && data.results.length > 0) {
+        return this.parseGoogleResults(data.results);
+      } else {
+        return {
+          success: false,
+          error: data.status
+        };
+      }
+    } catch (error) {
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+  parseGoogleResults(results) {
+    const hierarchy = {
+      country: null,
+      province: null,
+      city: null,
+      sector: null,
+      formatted_address: results[0]?.formatted_address || '',
+      success: true
+    };
+    const typeMapping = {
+      'country': 'country',
+      'administrative_area_level_1': 'province',
+      'locality': 'city',
+      'administrative_area_level_2': 'city',
+      'sublocality': 'sector',
+      'sublocality_level_1': 'sector',
+      'neighborhood': 'sector'
+    };
+    const componentsByLevel = new Map();
+    results.forEach((result, resultIndex)=>{
+      const baseScore = 10 - resultIndex;
+      result.address_components.forEach((component)=>{
+        component.types.forEach((type)=>{
+          const level = typeMapping[type];
+          if (level) {
+            const currentScore = componentsByLevel.get(level)?.score || 0;
+            if (baseScore > currentScore) {
+              componentsByLevel.set(level, {
+                name: component.long_name,
+                score: baseScore,
+                types: component.types
+              });
+            }
+          }
+        });
+      });
+    });
+    componentsByLevel.forEach((data, level)=>{
+      hierarchy[level] = {
+        name: data.name,
+        types: data.types
+      };
+    });
+    return hierarchy;
+  }
+  logGoogleHierarchy(hierarchy) {
+    const levels = [
+      'country',
+      'province',
+      'city',
+      'sector'
+    ];
+    return levels.filter((level)=>hierarchy[level]?.name).map((level)=>`${level}: "${hierarchy[level].name}"`).join(' | ');
+  }
+  async findNearbyWithAnalysis(lat, lng, googleHierarchy) {
+    console.log('🔍 === ANÁLISIS DE CERCANÍA ===');
+    const analysis = {
+      exact_matches: [],
+      nearby_different: [],
+      alias_matches: [],
+      missing_levels: [],
+      hierarchy_gaps: [] // Gaps en jerarquía detectada
+    };
+    // Analizar cada nivel detectado por Google
+    const levels = [
+      'sector',
+      'city',
+      'province',
+      'country'
+    ];
+    for (const level of levels){
+      if (!googleHierarchy[level]?.name) {
+        analysis.missing_levels.push(level);
+        continue;
+      }
+      const googleName = googleHierarchy[level].name;
+      const radius = this.countryConfig.search_radius[level];
+      console.log(`🔍 Analizando ${level}: "${googleName}" en radio ${radius}km`);
+      // Buscar ubicaciones cercanas de este nivel
+      const nearbyLocations = await this.findByProximity(lat, lng, level, radius);
+      if (nearbyLocations.length > 0) {
+        console.log(`📍 ${nearbyLocations.length} ubicaciones cercanas encontradas`);
+        // Verificar matches exactos
+        const exactMatch = nearbyLocations.find((loc)=>this.isExactNameMatch(googleName, loc));
+        if (exactMatch) {
+          console.log(`✅ Match exacto: ${exactMatch.location_name}`);
+          analysis.exact_matches.push({
+            level: level,
+            google_name: googleName,
+            location: exactMatch,
+            confidence: 'exact'
+          });
+          continue; // Nivel resuelto, continuar
+        }
+        // Verificar aliases existentes
+        const aliasMatch = await this.findByAliasName(googleName, level);
+        if (aliasMatch) {
+          console.log(`🔗 Match por alias: ${aliasMatch.alias_name} → ${aliasMatch.location_name}`);
+          analysis.alias_matches.push({
+            level: level,
+            google_name: googleName,
+            location: aliasMatch,
+            alias_used: aliasMatch.alias_name,
+            confidence: 'alias'
+          });
+          continue; // Nivel resuelto, continuar
+        }
+        // Ubicaciones cercanas con nombres diferentes
+        console.log(`🤔 Ubicaciones cercanas con nombres diferentes`);
+        analysis.nearby_different.push({
+          level: level,
+          google_name: googleName,
+          nearby_locations: nearbyLocations.slice(0, 3),
+          requires_confirmation: true
+        });
+      } else {
+        console.log(`❌ No hay ubicaciones cercanas para ${level}`);
+      }
+    }
+    return analysis;
+  }
+  async findByProximity(lat, lng, locationType, radiusKm) {
+    try {
+      const { data } = await this.supabase.from('location_insights').select('id, location_name, canonical_name, display_name, location_type, parent_location_id, tag_id, coordinates, usage_count').eq('location_type', locationType).eq('status', 'active').not('coordinates', 'is', null);
+      if (!data) return [];
+      const nearby = data.map((location)=>{
+        const coords = this.parseCoordinates(location.coordinates);
+        if (!coords) return null;
+        const distance = this.calculateDistance(lat, lng, coords.lat, coords.lng);
+        return distance <= radiusKm ? {
+          ...location,
+          distance,
+          coords
+        } : null;
+      }).filter(Boolean).sort((a, b)=>a.distance - b.distance); // Ordenar por distancia
+      return nearby;
+    } catch (error) {
+      console.error(`❌ Error buscando ${locationType}:`, error);
+      return [];
+    }
+  }
+  isExactNameMatch(googleName, location) {
+    const names = [
+      location.location_name,
+      location.canonical_name,
+      location.display_name
+    ].filter(Boolean);
+    return names.some((name)=>name.toLowerCase().trim() === googleName.toLowerCase().trim());
+  }
+  async findByAliasName(aliasName, locationType) {
+    try {
+      const { data } = await this.supabase.from('location_aliases').select(`
+          id,
+          alias_name,
+          location_insight_id,
+          location_insights!inner (
+            id,
+            location_name,
+            canonical_name,
+            display_name,
+            location_type,
+            parent_location_id,
+            tag_id,
+            coordinates,
+            usage_count
+          )
+        `).eq('alias_name', aliasName).eq('location_insights.location_type', locationType).eq('location_insights.status', 'active').maybeSingle();
+      if (data?.location_insights) {
+        return {
+          ...data.location_insights,
+          alias_name: data.alias_name,
+          found_via_alias: true
+        };
+      }
+      return null;
+    } catch (error) {
+      console.error('❌ Error buscando alias:', error);
+      return null;
+    }
+  }
+  async processProximityResult(analysis, googleHierarchy, coordinates, propertyId) {
+    console.log('⚡ === PROCESANDO RESULTADO DE ANÁLISIS ===');
+    // CASO 1: Todos los niveles tienen matches exactos o aliases
+    if (this.allLevelsResolved(analysis)) {
+      console.log('✅ CASO 1: Todos los niveles resueltos');
+      return await this.useResolvedHierarchy(analysis, coordinates, propertyId);
+    }
+    // CASO 2: Hay confirmaciones de alias necesarias
+    if (analysis.nearby_different.length > 0) {
+      console.log('🤔 CASO 2: Confirmaciones de alias necesarias');
+      return {
+        requires_confirmation: true,
+        confirmation_type: 'alias',
+        alias_confirmations: analysis.nearby_different,
+        google_data: googleHierarchy,
+        coordinates: coordinates,
+        resolved_levels: [
+          ...analysis.exact_matches,
+          ...analysis.alias_matches
+        ]
+      };
+    }
+    // CASO 3: Hay niveles faltantes (zonas rurales)
+    if (analysis.missing_levels.length > 0) {
+      console.log('🏞️ CASO 3: Niveles faltantes - zona rural');
+      return await this.handleMissingLevels(analysis, googleHierarchy, coordinates, propertyId);
+    }
+    // CASO 4: Crear jerarquía completa desde Google
+    console.log('🆕 CASO 4: Crear jerarquía completa');
+    return await this.createCompleteHierarchy(googleHierarchy, coordinates, propertyId);
+  }
+  allLevelsResolved(analysis) {
+    const totalResolved = analysis.exact_matches.length + analysis.alias_matches.length;
+    const totalDetected = 4 - analysis.missing_levels.length; // Máximo 4 niveles
+    return totalResolved === totalDetected && analysis.nearby_different.length === 0;
+  }
+  async useResolvedHierarchy(analysis, coordinates, propertyId) {
+    console.log('✅ Usando jerarquía completamente resuelta');
+    // Combinar matches exactos y de alias
+    const allMatches = [
+      ...analysis.exact_matches,
+      ...analysis.alias_matches
+    ];
+    // Encontrar el match más específico para usar como ancla
+    const levelPriority = {
+      sector: 4,
+      city: 3,
+      province: 2,
+      country: 1
+    };
+    const anchor = allMatches.reduce((best, current)=>{
+      return levelPriority[current.level] > levelPriority[best.level] ? current : best;
+    });
+    // Construir jerarquía completa desde el ancla
+    const hierarchy = await this.buildCompleteHierarchy(anchor.location);
+    // Actualizar estadísticas
+    await this.updateLocationStats(anchor.location.id);
+    // Vincular con propiedad
+    if (propertyId) {
+      await this.linkPropertyToHierarchy(propertyId, hierarchy);
+    }
+    return {
+      success: true,
+      action: 'existing_hierarchy_used',
+      anchor_level: anchor.level,
+      match_types: allMatches.map((m)=>({
+          level: m.level,
+          type: m.confidence
+        })),
+      hierarchy: hierarchy,
+      coordinates: coordinates
+    };
+  }
+  async handleMissingLevels(analysis, googleHierarchy, coordinates, propertyId) {
+    console.log('🏞️ Manejando niveles faltantes...');
+    // Identificar qué tenemos y qué nos falta
+    const resolvedLevels = [
+      ...analysis.exact_matches,
+      ...analysis.alias_matches
+    ];
+    const missingLevels = analysis.missing_levels;
+    console.log('📋 Niveles resueltos:', resolvedLevels.map((r)=>r.level));
+    console.log('❓ Niveles faltantes:', missingLevels);
+    // Encontrar el nivel más alto que tenemos resuelto
+    const levelHierarchy = [
+      'country',
+      'province',
+      'city',
+      'sector'
+    ];
+    const highestResolvedIndex = Math.min(...resolvedLevels.map((r)=>levelHierarchy.indexOf(r.level)));
+    const highestResolved = resolvedLevels.find((r)=>levelHierarchy.indexOf(r.level) === highestResolvedIndex);
+    console.log('🎯 Nivel más alto resuelto:', highestResolved.level);
+    // Buscar opciones para niveles faltantes
+    const missingLevelOptions = await this.findOptionsForMissingLevels(highestResolved, missingLevels, coordinates);
+    return {
+      requires_confirmation: true,
+      confirmation_type: 'missing_levels',
+      highest_resolved: highestResolved,
+      missing_levels: missingLevels,
+      missing_level_options: missingLevelOptions,
+      google_data: googleHierarchy,
+      coordinates: coordinates
+    };
+  }
+  async findOptionsForMissingLevels(highestResolved, missingLevels, coordinates) {
+    const options = {};
+    // Si tenemos provincia pero falta ciudad
+    if (highestResolved.level === 'province' && missingLevels.includes('city')) {
+      const cities = await this.findChildrenLocations(highestResolved.location.id, 'city');
+      options.city = {
+        existing_options: cities,
+        can_create_new: true
+      };
+    }
+    // Si tenemos ciudad pero falta sector
+    if (highestResolved.level === 'city' && missingLevels.includes('sector')) {
+      const sectors = await this.findChildrenLocations(highestResolved.location.id, 'sector');
+      // También buscar sectores cercanos para sugerir
+      const nearbySectors = await this.findByProximity(coordinates.lat, coordinates.lng, 'sector', this.countryConfig.search_radius.sector * 2 // Radio ampliado
+      );
+      options.sector = {
+        existing_options: sectors,
+        nearby_suggestions: nearbySectors.slice(0, 3),
+        can_create_new: true
+      };
+    }
+    return options;
+  }
+  async findChildrenLocations(parentId, childType) {
+    try {
+      const { data } = await this.supabase.from('location_insights').select('id, location_name, canonical_name, display_name, location_type, coordinates, usage_count').eq('parent_location_id', parentId).eq('location_type', childType).eq('status', 'active').order('usage_count', {
+        ascending: false
+      }).order('location_name');
+      return data || [];
+    } catch (error) {
+      console.error('❌ Error buscando hijos:', error);
+      return [];
+    }
+  }
+  async createCompleteHierarchy(googleHierarchy, coordinates, propertyId) {
+    console.log('🆕 Creando jerarquía completa desde Google');
+    const hierarchy = {
+      country: null,
+      province: null,
+      city: null,
+      sector: null,
+      location_ids: {},
+      tag_ids: []
+    };
+    let parentId = null;
+    const levels = [
+      'country',
+      'province',
+      'city',
+      'sector'
+    ];
+    for (const level of levels){
+      if (googleHierarchy[level]?.name) {
+        const shouldHaveCoords = level === 'city' || level === 'sector';
+        const locationId = await this.createLocationWithTag(googleHierarchy[level].name, level, parentId, shouldHaveCoords ? coordinates : null);
+        const { data: newLocation } = await this.supabase.from('location_insights').select('id, location_name, canonical_name, display_name, tag_id, coordinates').eq('id', locationId).single();
+        hierarchy[level] = {
+          id: locationId,
+          name: newLocation.canonical_name || newLocation.location_name,
+          display_name: newLocation.display_name || newLocation.location_name,
+          coordinates: newLocation.coordinates,
+          created: true
+        };
+        hierarchy.location_ids[level] = locationId;
+        if (newLocation.tag_id) {
+          hierarchy.tag_ids.push(newLocation.tag_id);
+        }
+        parentId = locationId;
+      }
+    }
+    if (propertyId) {
+      await this.linkPropertyToHierarchy(propertyId, hierarchy);
+    }
+    return {
+      success: true,
+      action: 'new_hierarchy_created',
+      hierarchy: hierarchy,
+      coordinates: coordinates,
+      created_levels: Object.keys(hierarchy.location_ids)
+    };
+  }
+  async buildCompleteHierarchy(anchorLocation) {
+    const hierarchy = {
+      country: null,
+      province: null,
+      city: null,
+      sector: null,
+      location_ids: {},
+      tag_ids: []
+    };
+    let current = anchorLocation;
+    while(current){
+      hierarchy[current.location_type] = {
+        id: current.id,
+        name: current.canonical_name || current.location_name,
+        display_name: current.display_name || current.location_name,
+        coordinates: current.coordinates,
+        found_via_alias: current.found_via_alias || false
+      };
+      hierarchy.location_ids[current.location_type] = current.id;
+      if (current.tag_id) {
+        hierarchy.tag_ids.push(current.tag_id);
+      }
+      if (current.parent_location_id) {
+        const { data: parent } = await this.supabase.from('location_insights').select('id, location_name, canonical_name, display_name, location_type, parent_location_id, tag_id, coordinates').eq('id', current.parent_location_id).single();
+        current = parent;
+      } else {
+        current = null;
+      }
+    }
+    return hierarchy;
+  }
+  async createLocationWithTag(name, type, parentId, coords) {
+    const locationData = {
+      location_name: name,
+      canonical_name: name,
+      display_name: name,
+      location_type: type,
+      status: 'active',
+      usage_count: 1,
+      last_used_at: new Date().toISOString(),
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+    if (coords) {
+      locationData.coordinates = `(${coords.lng},${coords.lat})`;
+    }
+    if (parentId) {
+      locationData.parent_location_id = parentId;
+    }
+    const { data: location, error } = await this.supabase.from('location_insights').insert(locationData).select('id').single();
+    if (error) throw error;
+    const tagId = await this.createTag(location.id, name, type);
+    if (tagId) {
+      await this.supabase.from('location_insights').update({
+        tag_id: tagId
+      }).eq('id', location.id);
+    }
+    return location.id;
+  }
+  async createTag(locationId, name, type) {
+    const slug = name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-').replace(/-+/g, '-').trim();
+    const categoryMapping = {
+      'country': 'pais',
+      'province': 'provincia',
+      'city': 'ciudad',
+      'sector': 'sector'
+    };
+    try {
+      const { data: tag, error } = await this.supabase.from('tags').insert({
+        name: name,
+        slug: slug,
+        category: categoryMapping[type] || 'ubicacion',
+        display_name: name,
+        description: `Propiedades en ${name}`,
+        active: true,
+        location_insight_id: locationId,
+        created_at: new Date().toISOString()
+      }).select('id').single();
+      if (error) throw error;
+      return tag.id;
+    } catch (error) {
+      console.error('❌ Error creando tag:', error);
+      return null;
+    }
+  }
+  async updateLocationStats(locationId) {
+    try {
+      const { data: current } = await this.supabase.from('location_insights').select('usage_count').eq('id', locationId).single();
+      const newCount = (current?.usage_count || 0) + 1;
+      await this.supabase.from('location_insights').update({
+        usage_count: newCount,
+        last_used_at: new Date().toISOString()
+      }).eq('id', locationId);
+    } catch (error) {
+      console.error('❌ Error actualizando stats:', error);
+    }
+  }
+  async linkPropertyToHierarchy(propertyId, hierarchy) {
+    if (!propertyId || !hierarchy.tag_ids.length) return;
+    const weightMapping = {
+      'sector': 1.0,
+      'ciudad': 0.8,
+      'provincia': 0.6,
+      'pais': 0.4
+    };
+    try {
+      const { data: tags } = await this.supabase.from('tags').select('id, category').in('id', hierarchy.tag_ids);
+      const contentTags = hierarchy.tag_ids.map((tagId)=>{
+        const tag = tags.find((t)=>t.id === tagId);
+        return {
+          content_id: propertyId,
+          content_type: 'property',
+          tag_id: tagId,
+          weight: weightMapping[tag?.category] || 0.5,
+          auto_generated: true,
+          created_at: new Date().toISOString()
+        };
+      });
+      const { data: existing } = await this.supabase.from('content_tags').select('tag_id').eq('content_id', propertyId).eq('content_type', 'property').in('tag_id', hierarchy.tag_ids);
+      const existingIds = existing?.map((e)=>e.tag_id) || [];
+      const newTags = contentTags.filter((ct)=>!existingIds.includes(ct.tag_id));
+      if (newTags.length > 0) {
+        await this.supabase.from('content_tags').insert(newTags);
+      }
+    } catch (error) {
+      console.error('❌ Error vinculando propiedad:', error);
+    }
+  }
+  parseCoordinates(coords) {
+    if (!coords) return null;
+    try {
+      if (typeof coords === 'object' && coords.lat && coords.lng) {
+        return coords;
+      }
+      if (typeof coords === 'string') {
+        const match = coords.match(/\(([^,\s]+)[,\s]\s*([^)]+)\)/);
+        if (match) {
+          const lng = parseFloat(match[1].trim());
+          const lat = parseFloat(match[2].trim());
+          return {
+            lat,
+            lng
+          };
+        }
+      }
+    } catch (err) {
+      console.error('Error parseando coordenadas:', err);
+    }
+    return null;
+  }
+  calculateDistance(lat1, lng1, lat2, lng2) {
+    const R = 6371;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLng = (lng2 - lng1) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+  }
+}
+// Procesamiento de confirmaciones
+async function processConfirmations(supabase, confirmationData) {
+  const { type, ...data } = confirmationData;
+  if (type === 'alias') {
+    return await processAliasConfirmation(supabase, data);
+  } else if (type === 'missing_levels') {
+    return await processMissingLevelsConfirmation(supabase, data);
+  }
+  throw new Error(`Tipo de confirmación desconocido: ${type}`);
+}
+async function processAliasConfirmation(supabase, confirmationData) {
+  const { create_alias, google_name, existing_location_id, level, lat, lng, property_id } = confirmationData;
+  const countryConfig = detectCountryFromCoordinates(lat, lng).config;
+  const resolver = new ExactFlowLocationResolver(supabase, countryConfig);
+  try {
+    if (create_alias) {
+      // Verificar si ya existe el alias GLOBALMENTE
+      const { data: existingAlias } = await supabase.from('location_aliases').select('id, location_insight_id, location_insights!inner(location_name)').eq('alias_name', google_name).maybeSingle();
+      if (existingAlias) {
+        if (existingAlias.location_insight_id === existing_location_id) {
+          console.log('✅ Alias ya existe para esta ubicación');
+        } else {
+          throw new Error(`El alias "${google_name}" ya existe para "${existingAlias.location_insights.location_name}"`);
+        }
+      } else {
+        // Crear nuevo alias
+        await supabase.from('location_aliases').insert({
+          location_insight_id: existing_location_id,
+          alias_name: google_name,
+          source: 'user_confirmed',
+          confirmed_by_user: true,
+          confirmed_at: new Date().toISOString(),
+          created_at: new Date().toISOString()
+        });
+        console.log(`✅ Alias creado: "${google_name}" → ${existing_location_id}`);
+      }
+      // Obtener ubicación y construir jerarquía
+      const { data: location } = await supabase.from('location_insights').select('id, location_name, canonical_name, display_name, location_type, parent_location_id, tag_id, coordinates').eq('id', existing_location_id).single();
+      const hierarchy = await resolver.buildCompleteHierarchy(location);
+      await resolver.updateLocationStats(existing_location_id);
+      if (property_id) {
+        await resolver.linkPropertyToHierarchy(property_id, hierarchy);
+      }
+      return {
+        success: true,
+        action: 'alias_created',
+        hierarchy: hierarchy,
+        alias_created: {
+          google_name,
+          existing_location_id
+        }
+      };
+    } else {
+      // Crear nueva ubicación
+      const locationId = await resolver.createLocationWithTag(google_name, level, null, {
+        lat,
+        lng
+      });
+      const { data: newLocation } = await supabase.from('location_insights').select('id, location_name, canonical_name, display_name, location_type, tag_id, coordinates').eq('id', locationId).single();
+      const hierarchy = await resolver.buildCompleteHierarchy(newLocation);
+      if (property_id) {
+        await resolver.linkPropertyToHierarchy(property_id, hierarchy);
+      }
+      return {
+        success: true,
+        action: 'new_location_created',
+        hierarchy: hierarchy,
+        new_location: {
+          google_name,
+          location_id: locationId
+        }
+      };
+    }
+  } catch (error) {
+    console.error('❌ Error en confirmación de alias:', error);
+    throw error;
+  }
+}
+async function processMissingLevelsConfirmation(supabase, confirmationData) {
+  const { selections, create_new, lat, lng, property_id } = confirmationData;
+  const countryConfig = detectCountryFromCoordinates(lat, lng).config;
+  const resolver = new ExactFlowLocationResolver(supabase, countryConfig);
+  try {
+    let hierarchyIds = {};
+    let currentParentId = null;
+    // Procesar selecciones en orden jerárquico
+    const levels = [
+      'country',
+      'province',
+      'city',
+      'sector'
+    ];
+    for (const level of levels){
+      if (selections[level]) {
+        if (selections[level].type === 'existing') {
+          hierarchyIds[level] = selections[level].id;
+          currentParentId = selections[level].id;
+        } else if (selections[level].type === 'new') {
+          const newId = await resolver.createLocationWithTag(selections[level].name, level, currentParentId, level === 'city' || level === 'sector' ? {
+            lat,
+            lng
+          } : null);
+          hierarchyIds[level] = newId;
+          currentParentId = newId;
+        }
+      }
+    }
+    // Construir jerarquía final
+    const finalLocationId = hierarchyIds.sector || hierarchyIds.city || hierarchyIds.province || hierarchyIds.country;
+    const { data: finalLocation } = await supabase.from('location_insights').select('*').eq('id', finalLocationId).single();
+    const hierarchy = await resolver.buildCompleteHierarchy(finalLocation);
+    if (property_id) {
+      await resolver.linkPropertyToHierarchy(property_id, hierarchy);
+    }
+    return {
+      success: true,
+      action: 'missing_levels_resolved',
+      hierarchy: hierarchy,
+      created_levels: Object.keys(create_new || {}),
+      selected_levels: Object.keys(selections || {})
+    };
+  } catch (error) {
+    console.error('❌ Error procesando niveles faltantes:', error);
+    throw error;
+  }
+}
+// Detectar país
+function detectCountryFromCoordinates(lat, lng) {
+  for (const [countryCode, config] of Object.entries(COUNTRY_CONFIGS)){
+    const { bounds } = config;
+    if (lat >= bounds.south && lat <= bounds.north && lng >= bounds.west && lng <= bounds.east) {
+      return {
+        code: countryCode,
+        config
+      };
+    }
+  }
+  return {
+    code: 'GENERIC',
+    config: {
+      name: 'País no identificado',
+      language: 'es',
+      region: 'GENERIC',
+      search_radius: {
+        country: 200,
+        province: 50,
+        city: 8,
+        sector: 1.5
+      }
+    }
+  };
+}
+// Endpoint principal
+Deno.serve(async (req)=>{
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', {
+      headers: corsHeaders
+    });
+  }
+  try {
+    const supabase = createClient('https://pacewqgypevfgjmdsorz.supabase.co', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBhY2V3cWd5cGV2ZmdqbWRzb3J6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDg2NjU4OTksImV4cCI6MjA2NDI0MTg5OX0.Qlg-UVy-sikr76GxYmTcfCz1EnAqPHxvFeLrdqnjuWs');
+    const url = new URL(req.url);
+    const lat = parseFloat(url.searchParams.get('lat'));
+    const lng = parseFloat(url.searchParams.get('lng'));
+    const propertyId = url.searchParams.get('property_id');
+    const mode = url.searchParams.get('mode') || 'resolve';
+    if (!lat || !lng || isNaN(lat) || isNaN(lng)) {
+      return new Response(JSON.stringify({
+        error: 'Parámetros lat y lng requeridos',
+        type: 'invalid_parameters'
+      }), {
+        status: 400,
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'application/json'
+        }
+      });
+    }
+    const { config: countryConfig } = detectCountryFromCoordinates(lat, lng);
+    if (mode === 'confirm') {
+      const body = await req.json();
+      const result = await processConfirmations(supabase, body);
+      return new Response(JSON.stringify({
+        success: true,
+        mode: 'confirm',
+        processing_result: result,
+        timestamp: new Date().toISOString()
+      }), {
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'application/json'
+        }
+      });
+    }
+    const resolver = new ExactFlowLocationResolver(supabase, countryConfig);
+    const result = await resolver.resolveLocationFromPin(lat, lng, propertyId);
+    return new Response(JSON.stringify({
+      success: true,
+      mode: mode,
+      timestamp: new Date().toISOString(),
+      result: result
+    }), {
+      headers: {
+        ...corsHeaders,
+        'Content-Type': 'application/json'
+      }
+    });
+  } catch (error) {
+    console.error('❌ Error en geo-location-manager:', error);
+    return new Response(JSON.stringify({
+      error: 'Error interno del servidor',
+      type: 'server_error',
+      details: error.message,
+      timestamp: new Date().toISOString()
+    }), {
+      status: 500,
+      headers: {
+        ...corsHeaders,
+        'Content-Type': 'application/json'
+      }
+    });
+  }
+});

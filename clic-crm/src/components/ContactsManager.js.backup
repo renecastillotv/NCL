@@ -1,0 +1,1631 @@
+import React, { useState, useEffect } from 'react';
+import {
+    ArrowLeft, Edit, Download, Building, Phone, Mail, User,
+    Users, CheckCircle, Clock, AlertCircle, MapPin, Plus,
+    Eye, MessageSquare, FileText, Ban, AlertTriangle, Search,
+    Upload, RefreshCw, X, Filter, MoreVertical, Calendar,
+    ExternalLink, Copy, Trash2, UserPlus
+} from 'lucide-react';
+
+// Configuración de Supabase
+const supabaseUrl = 'https://pacewqgypevfgjmdsorz.supabase.co';
+const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBhY2V3cWd5cGV2ZmdqbWRzb3J6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDg2NjU4OTksImV4cCI6MjA2NDI0MTg5OX0.Qlg-UVy-sikr76GxYmTcfCz1EnAqPHxvFeLrdqnjuWs';
+
+// Usuario por defecto
+const getCurrentUser = () => ({
+    id: '6e9575f8-d8ef-4671-aa7f-e7193a2d3f21',
+    email: 'demo@empresa.com'
+});
+
+// Cliente Supabase personalizado
+const createClient = (url, key) => ({
+    from: (table) => ({
+        select: (fields) => ({
+            eq: (field, value) => ({
+                single: async () => {
+                    try {
+                        const response = await fetch(`${url}/rest/v1/${table}?${field}=eq.${value}&select=${encodeURIComponent(fields)}`, {
+                            headers: { 'apikey': key, 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' }
+                        });
+                        const data = await response.json();
+                        return { data: data[0] || null, error: response.ok ? null : { message: 'Error fetching data' } };
+                    } catch (error) {
+                        return { data: null, error: { message: error.message } };
+                    }
+                }
+            }),
+            order: async (orderField, options = {}) => {
+                try {
+                    const ascending = options.ascending !== false;
+                    const query = `select=${encodeURIComponent(fields)}&order=${orderField}.${ascending ? 'asc' : 'desc'}`;
+                    const response = await fetch(`${url}/rest/v1/${table}?${query}`, {
+                        headers: { 'apikey': key, 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' }
+                    });
+                    const data = await response.json();
+                    return { data: data || [], error: response.ok ? null : { message: 'Error fetching data' } };
+                } catch (error) {
+                    return { data: [], error: { message: error.message } };
+                }
+            },
+            or: (conditions) => ({
+                order: async (orderField, options = {}) => {
+                    try {
+                        const ascending = options.ascending !== false;
+                        const query = `or=(${conditions})&select=${encodeURIComponent(fields)}&order=${orderField}.${ascending ? 'asc' : 'desc'}`;
+                        const response = await fetch(`${url}/rest/v1/${table}?${query}`, {
+                            headers: { 'apikey': key, 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' }
+                        });
+                        const data = await response.json();
+                        return { data: data || [], error: response.ok ? null : { message: 'Error fetching data' } };
+                    } catch (error) {
+                        return { data: [], error: { message: error.message } };
+                    }
+                }
+            })
+        }),
+        insert: (data) => ({
+            select: async () => {
+                try {
+                    const currentUser = getCurrentUser();
+                    const dataWithUser = {
+                        ...data,
+                        created_by: data.created_by || currentUser.id,
+                        created_at: data.created_at || new Date().toISOString(),
+                        updated_at: data.updated_at || new Date().toISOString()
+                    };
+
+                    const response = await fetch(`${url}/rest/v1/${table}`, {
+                        method: 'POST',
+                        headers: {
+                            'apikey': key,
+                            'Authorization': `Bearer ${key}`,
+                            'Content-Type': 'application/json',
+                            'Prefer': 'return=representation'
+                        },
+                        body: JSON.stringify(dataWithUser)
+                    });
+
+                    if (!response.ok) {
+                        const errorText = await response.text();
+                        throw new Error(`HTTP ${response.status}: ${errorText}`);
+                    }
+
+                    const result = await response.json();
+                    return { data: result, error: null };
+                } catch (error) {
+                    return { data: null, error: { message: error.message } };
+                }
+            }
+        }),
+        update: (data) => ({
+            eq: (field, value) => ({
+                select: (fields = '*') => {
+                    const executeUpdate = async () => {
+                        try {
+                            const dataWithTimestamp = { ...data, updated_at: new Date().toISOString() };
+
+                            const response = await fetch(`${url}/rest/v1/${table}?${field}=eq.${value}`, {
+                                method: 'PATCH',
+                                headers: {
+                                    'apikey': key,
+                                    'Authorization': `Bearer ${key}`,
+                                    'Content-Type': 'application/json',
+                                    'Prefer': 'return=representation'
+                                },
+                                body: JSON.stringify(dataWithTimestamp)
+                            });
+
+                            if (!response.ok) {
+                                const errorText = await response.text();
+                                throw new Error(`HTTP ${response.status}: ${errorText}`);
+                            }
+
+                            const result = await response.json();
+                            return { 
+                                data: result, 
+                                error: null
+                            };
+                        } catch (error) {
+                            return { data: null, error: { message: error.message } };
+                        }
+                    };
+
+                    const responseObj = executeUpdate();
+                    responseObj.single = async () => {
+                        const result = await executeUpdate();
+                        return {
+                            data: Array.isArray(result.data) ? result.data[0] : result.data,
+                            error: result.error
+                        };
+                    };
+                    
+                    return responseObj;
+                }
+            })
+        }),
+        delete: () => ({
+            eq: async (field, value) => {
+                try {
+                    const response = await fetch(`${url}/rest/v1/${table}?${field}=eq.${value}`, {
+                        method: 'DELETE',
+                        headers: { 'apikey': key, 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' }
+                    });
+                    return { error: response.ok ? null : { message: 'Error deleting data' } };
+                } catch (error) {
+                    return { error: { message: error.message } };
+                }
+            }
+        })
+    })
+});
+
+const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
+// Componentes UI
+const Button = ({ children, variant = 'primary', size = 'md', icon, className = '', disabled = false, onClick, ...props }) => {
+    const baseClasses = 'inline-flex items-center justify-center font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2';
+    const variants = {
+        primary: 'bg-orange-600 text-white hover:bg-orange-700 focus:ring-orange-500',
+        secondary: 'bg-gray-600 text-white hover:bg-gray-700 focus:ring-gray-500',
+        outline: 'border border-gray-300 text-gray-700 bg-white hover:bg-gray-50 focus:ring-orange-500',
+        ghost: 'text-gray-600 hover:text-gray-900 hover:bg-gray-100 focus:ring-gray-500',
+        danger: 'bg-red-600 text-white hover:bg-red-700 focus:ring-red-500',
+        success: 'bg-green-600 text-white hover:bg-green-700 focus:ring-green-500'
+    };
+    const sizes = {
+        xs: 'px-2 py-1 text-xs',
+        sm: 'px-3 py-1.5 text-sm',
+        md: 'px-4 py-2 text-sm',
+        lg: 'px-6 py-3 text-base'
+    };
+
+    return (
+        <button
+            className={`${baseClasses} ${variants[variant]} ${sizes[size]} ${className} ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+            disabled={disabled}
+            onClick={onClick}
+            {...props}
+        >
+            {icon && <span className="mr-2">{icon}</span>}
+            {children}
+        </button>
+    );
+};
+
+const Card = ({ children, className = '', title, ...props }) => (
+    <div className={`bg-white rounded-lg border border-gray-200 shadow-sm ${className}`} {...props}>
+        {title && (
+            <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
+                <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
+            </div>
+        )}
+        {children}
+    </div>
+);
+
+const Badge = ({ children, variant = 'default', className = '' }) => {
+    const variants = {
+        default: 'bg-gray-100 text-gray-800',
+        success: 'bg-green-100 text-green-800',
+        warning: 'bg-yellow-100 text-yellow-800',
+        danger: 'bg-red-100 text-red-800',
+        info: 'bg-blue-100 text-blue-800',
+        primary: 'bg-orange-100 text-orange-800'
+    };
+
+    return (
+        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${variants[variant]} ${className}`}>
+            {children}
+        </span>
+    );
+};
+
+const Input = ({ label, error, className = '', ...props }) => (
+    <div className={className}>
+        {label && <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>}
+        <input
+            className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 ${error ? 'border-red-300' : ''}`}
+            {...props}
+        />
+        {error && <p className="text-red-500 text-xs mt-1">{error}</p>}
+    </div>
+);
+
+const Select = ({ label, error, children, className = '', ...props }) => (
+    <div className={className}>
+        {label && <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>}
+        <select
+            className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 ${error ? 'border-red-300' : ''}`}
+            {...props}
+        >
+            {children}
+        </select>
+        {error && <p className="text-red-500 text-xs mt-1">{error}</p>}
+    </div>
+);
+
+const Textarea = ({ label, error, className = '', ...props }) => (
+    <div className={className}>
+        {label && <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>}
+        <textarea
+            className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 ${error ? 'border-red-300' : ''}`}
+            rows={3}
+            {...props}
+        />
+        {error && <p className="text-red-500 text-xs mt-1">{error}</p>}
+    </div>
+);
+
+// Modal de Edición de Contacto
+const ContactEditModal = ({ contact, onClose, onSave }) => {
+    const [formData, setFormData] = useState({
+        name: contact?.name || '',
+        email: contact?.email || '',
+        phone: contact?.phone || '',
+        document_number: contact?.document_number || '',
+        address: contact?.address || '',
+        city_id: contact?.city_id || '',
+        notes: contact?.notes || '',
+        source: contact?.source || ''
+    });
+    const [cities, setCities] = useState([]);
+    const [loading, setLoading] = useState(false);
+    const [errors, setErrors] = useState({});
+
+    useEffect(() => {
+        const fetchCities = async () => {
+            try {
+                const { data, error } = await supabase.from('cities').select('id, name').order('name');
+                setCities(error ? [
+                    { id: '1', name: 'Santo Domingo' },
+                    { id: '2', name: 'Santiago' },
+                    { id: '3', name: 'La Romana' }
+                ] : data || []);
+            } catch (err) {
+                setCities([{ id: '1', name: 'Santo Domingo' }]);
+            }
+        };
+        fetchCities();
+    }, []);
+
+    const handleSubmit = async () => {
+        setLoading(true);
+        setErrors({});
+
+        try {
+            const newErrors = {};
+            if (!formData.name.trim()) newErrors.name = 'El nombre es requerido';
+            if (formData.email && !/\S+@\S+\.\S+/.test(formData.email)) {
+                newErrors.email = 'Email inválido';
+            }
+
+            if (Object.keys(newErrors).length > 0) {
+                setErrors(newErrors);
+                return;
+            }
+
+            const dataToSend = {};
+            if (formData.name.trim()) dataToSend.name = formData.name.trim();
+            if (formData.email.trim()) dataToSend.email = formData.email.trim();
+            if (formData.phone.trim()) dataToSend.phone = formData.phone.trim();
+            if (formData.document_number.trim()) dataToSend.document_number = formData.document_number.trim();
+            if (formData.address.trim()) dataToSend.address = formData.address.trim();
+            if (formData.city_id) dataToSend.city_id = formData.city_id;
+            if (formData.notes.trim()) dataToSend.notes = formData.notes.trim();
+            if (formData.source) dataToSend.source = formData.source;
+
+            console.log('📝 Actualizando contacto:', contact.id, dataToSend);
+
+            const updateResult = await supabase
+                .from('contacts')
+                .update(dataToSend)
+                .eq('id', contact.id)
+                .select(`*, cities(id, name, country), users(first_name, last_name, email)`);
+
+            const { data, error } = await updateResult.single();
+
+            if (error) {
+                console.error('❌ Error actualizando:', error);
+                throw new Error(error.message || 'Error al actualizar el contacto');
+            }
+
+            console.log('✅ Contacto actualizado exitosamente:', data);
+            onSave(data);
+        } catch (error) {
+            console.error('❌ Error en handleSubmit:', error);
+            setErrors({ general: error.message || 'Error al guardar el contacto' });
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleChange = (field, value) => {
+        setFormData(prev => ({ ...prev, [field]: value }));
+        if (errors[field]) setErrors(prev => ({ ...prev, [field]: '' }));
+    };
+
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+                <div className="px-6 py-4 border-b border-gray-200">
+                    <div className="flex items-center justify-between">
+                        <h2 className="text-xl font-semibold text-gray-900">Editar Contacto</h2>
+                        <Button variant="ghost" size="sm" onClick={onClose} icon={<X className="w-4 h-4" />} />
+                    </div>
+                </div>
+
+                <div className="px-6 py-4 space-y-6">
+                    {errors.general && (
+                        <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+                            <p className="text-red-600 text-sm">{errors.general}</p>
+                        </div>
+                    )}
+
+                    <div>
+                        <h3 className="text-lg font-semibold text-gray-900 mb-4">Información Básica</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <Input
+                                label="Nombre completo *"
+                                value={formData.name}
+                                onChange={(e) => handleChange('name', e.target.value)}
+                                error={errors.name}
+                                placeholder="Ej: Juan Pérez González"
+                            />
+                            <Input
+                                label="Cédula"
+                                value={formData.document_number}
+                                onChange={(e) => handleChange('document_number', e.target.value)}
+                                placeholder="Ej: 001-1234567-8"
+                            />
+                        </div>
+                    </div>
+
+                    <div>
+                        <h3 className="text-lg font-semibold text-gray-900 mb-4">Información de Contacto</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <Input
+                                label="Email"
+                                type="email"
+                                value={formData.email}
+                                onChange={(e) => handleChange('email', e.target.value)}
+                                error={errors.email}
+                                placeholder="ejemplo@email.com"
+                            />
+                            <Input
+                                label="Teléfono"
+                                value={formData.phone}
+                                onChange={(e) => handleChange('phone', e.target.value)}
+                                placeholder="Ej: +1 809-555-0123"
+                            />
+                        </div>
+                    </div>
+
+                    <div>
+                        <h3 className="text-lg font-semibold text-gray-900 mb-4">Dirección</h3>
+                        <div className="space-y-4">
+                            <Input
+                                label="Dirección"
+                                value={formData.address}
+                                onChange={(e) => handleChange('address', e.target.value)}
+                                placeholder="Ej: Av. Winston Churchill #123"
+                            />
+                            <Select
+                                label="Ciudad"
+                                value={formData.city_id}
+                                onChange={(e) => handleChange('city_id', e.target.value)}
+                            >
+                                <option value="">Seleccionar ciudad</option>
+                                {cities.map(city => (
+                                    <option key={city.id} value={city.id}>{city.name}</option>
+                                ))}
+                            </Select>
+                        </div>
+                    </div>
+
+                    <div>
+                        <h3 className="text-lg font-semibold text-gray-900 mb-4">Información Adicional</h3>
+                        <div className="space-y-4">
+                            <Select
+                                label="Fuente"
+                                value={formData.source}
+                                onChange={(e) => handleChange('source', e.target.value)}
+                            >
+                                <option value="">Seleccionar fuente</option>
+                                <option value="Referido">Referido</option>
+                                <option value="Sitio Web">Sitio Web</option>
+                                <option value="Facebook Ads">Facebook Ads</option>
+                                <option value="Google Ads">Google Ads</option>
+                                <option value="WhatsApp">WhatsApp</option>
+                                <option value="Instagram">Instagram</option>
+                                <option value="LinkedIn">LinkedIn</option>
+                            </Select>
+                            <Textarea
+                                label="Notas"
+                                value={formData.notes}
+                                onChange={(e) => handleChange('notes', e.target.value)}
+                                placeholder="Información adicional sobre el contacto"
+                            />
+                        </div>
+                    </div>
+                </div>
+
+                <div className="px-6 py-4 border-t border-gray-200 flex space-x-3 justify-end">
+                    <Button variant="outline" onClick={onClose} disabled={loading}>Cancelar</Button>
+                    <Button 
+                        onClick={handleSubmit} 
+                        disabled={loading}
+                        icon={loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : null}
+                    >
+                        {loading ? 'Guardando...' : 'Guardar Cambios'}
+                    </Button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// Lista de Contactos
+const ContactsList = ({ onSelectContact, onCreateContact, onEditContact }) => {
+    const [contacts, setContacts] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [searchTerm, setSearchTerm] = useState('');
+    const [selectedSource, setSelectedSource] = useState('');
+    const [viewMode, setViewMode] = useState('cards');
+    const [agents, setAgents] = useState([]);
+    const [totalContacts, setTotalContacts] = useState(0);
+
+    const getSourceBadgeVariant = (source) => {
+        const variants = {
+            'Referido': 'success',
+            'Sitio Web': 'info',
+            'Facebook Ads': 'primary',
+            'Google Ads': 'warning',
+            'WhatsApp': 'success',
+            'Instagram': 'primary',
+            'LinkedIn': 'info'
+        };
+        return variants[source] || 'default';
+    };
+
+    const formatDate = (date) => {
+        if (!date) return '';
+        return new Date(date).toLocaleDateString('es-DO', {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric'
+        });
+    };
+
+    const clearAllFilters = () => {
+        setSearchTerm('');
+        setSelectedSource('');
+    };
+
+    const getActiveFiltersCount = () => {
+        let count = 0;
+        if (searchTerm) count++;
+        if (selectedSource) count++;
+        return count;
+    };
+
+    const handleDeleteContact = async (contactId) => {
+        try {
+            console.log('🗑️ Eliminando contacto:', contactId);
+            const { error } = await supabase
+                .from('contacts')
+                .delete()
+                .eq('id', contactId);
+
+            if (error) {
+                console.error('❌ Error eliminando contacto:', error);
+                alert('Error al eliminar el contacto');
+                return;
+            }
+
+            console.log('✅ Contacto eliminado exitosamente');
+            setContacts(contacts.filter(contact => contact.id !== contactId));
+            setTotalContacts(prev => prev - 1);
+            
+        } catch (error) {
+            console.error('❌ Error general eliminando:', error);
+            alert('Error al eliminar el contacto');
+        }
+    };
+
+    const handleExportContacts = () => {
+        try {
+            const csvHeaders = ['Nombre', 'Email', 'Teléfono', 'Ciudad', 'Fuente', 'Fecha Creación'];
+            const csvData = contacts.map(contact => [
+                contact.name || '',
+                contact.email || '',
+                contact.phone || '',
+                contact.cities?.name || '',
+                contact.source || '',
+                formatDate(contact.created_at)
+            ]);
+            
+            const csvContent = [csvHeaders, ...csvData]
+                .map(row => row.map(cell => `"${cell}"`).join(','))
+                .join('\n');
+            
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            const url = URL.createObjectURL(blob);
+            link.setAttribute('href', url);
+            link.setAttribute('download', `contactos_${new Date().toISOString().split('T')[0]}.csv`);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        } catch (error) {
+            console.error('Error exporting contacts:', error);
+            alert('Error al exportar contactos');
+        }
+    };
+
+    const handleImportContacts = () => {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.csv,.xlsx,.xls';
+        input.onchange = (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                alert(`Funcionalidad de importación en desarrollo. Archivo seleccionado: ${file.name}`);
+            }
+        };
+        input.click();
+    };
+
+    useEffect(() => {
+        const fetchContactsAndAgents = async () => {
+            try {
+                setLoading(true);
+                console.log('📞 Iniciando carga de contactos...');
+                
+                try {
+                    console.log('👥 Cargando agentes...');
+                    const { data: agentsData, error: agentsError } = await supabase
+                        .from('users')
+                        .select('id, first_name, last_name')
+                        .order('first_name');
+                    
+                    if (agentsError) {
+                        console.log('❌ Error cargando agentes:', agentsError);
+                    } else {
+                        console.log('✅ Agentes cargados:', agentsData?.length || 0);
+                        setAgents(agentsData || []);
+                    }
+                } catch (error) {
+                    console.log('❌ Error en agentes:', error);
+                    setAgents([]);
+                }
+
+                try {
+                    console.log('📋 Cargando contactos...');
+                    
+                    const { data: contactsData, error: contactsError } = await supabase
+                        .from('contacts')
+                        .select('*')
+                        .order('created_at', { ascending: false });
+                    
+                    if (contactsError) {
+                        console.error('❌ Error en query de contactos:', contactsError);
+                        setContacts([]);
+                        setTotalContacts(0);
+                    } else {
+                        console.log('✅ Contactos cargados:', contactsData?.length || 0);
+                        
+                        let filteredContacts = contactsData || [];
+                        
+                        if (searchTerm.trim()) {
+                            const term = searchTerm.toLowerCase();
+                            filteredContacts = filteredContacts.filter(contact => 
+                                (contact.name && contact.name.toLowerCase().includes(term)) ||
+                                (contact.email && contact.email.toLowerCase().includes(term)) ||
+                                (contact.phone && contact.phone.toLowerCase().includes(term))
+                            );
+                            console.log('🔍 Filtrados por búsqueda:', filteredContacts.length);
+                        }
+                        
+                        if (selectedSource) {
+                            filteredContacts = filteredContacts.filter(contact => contact.source === selectedSource);
+                            console.log('🏷️ Filtrados por fuente:', filteredContacts.length);
+                        }
+                        
+                        setContacts(filteredContacts);
+                        setTotalContacts(filteredContacts.length);
+                        console.log('📊 Total final:', filteredContacts.length);
+                    }
+                } catch (contactsError) {
+                    console.error('❌ Error general en contactos:', contactsError);
+                    setContacts([]);
+                    setTotalContacts(0);
+                }
+            } catch (error) {
+                console.error('❌ Error general:', error);
+                setContacts([]);
+                setTotalContacts(0);
+            } finally {
+                setLoading(false);
+                console.log('🏁 Terminó la carga de contactos');
+            }
+        };
+
+        fetchContactsAndAgents();
+    }, [searchTerm, selectedSource]);
+
+    const renderTableView = () => (
+        <Card>
+            <div className="overflow-x-auto">
+                <table className="w-full">
+                    <thead className="bg-gray-50 border-b border-gray-200">
+                        <tr>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-8">
+                                <input type="checkbox" className="rounded" />
+                            </th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Nombre
+                            </th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Email
+                            </th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Teléfono
+                            </th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Fuente
+                            </th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Fecha
+                            </th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">
+                                Acciones
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                        {contacts.map((contact) => (
+                            <tr key={contact.id} className="hover:bg-gray-50 cursor-pointer group" onClick={() => onSelectContact(contact.id)}>
+                                <td className="px-4 py-3 whitespace-nowrap">
+                                    <input 
+                                        type="checkbox" 
+                                        className="rounded" 
+                                        onClick={e => e.stopPropagation()} 
+                                    />
+                                </td>
+                                <td className="px-4 py-3 whitespace-nowrap max-w-xs">
+                                    <div className="flex items-center">
+                                        <div className="w-8 h-8 bg-orange-100 rounded-full flex items-center justify-center mr-3 flex-shrink-0">
+                                            <User className="w-4 h-4 text-orange-600" />
+                                        </div>
+                                        <div className="min-w-0">
+                                            <div className="text-sm font-medium text-gray-900 truncate">
+                                                {contact.name}
+                                            </div>
+                                            <div className="text-xs text-gray-500 truncate">
+                                                {contact.document_number || 'Sin cédula'}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td className="px-4 py-3 whitespace-nowrap max-w-xs">
+                                    <div className="text-sm text-gray-900 truncate">
+                                        {contact.email || '-'}
+                                    </div>
+                                </td>
+                                <td className="px-4 py-3 whitespace-nowrap">
+                                    <div className="text-sm text-gray-900">
+                                        {contact.phone || '-'}
+                                    </div>
+                                </td>
+                                <td className="px-4 py-3 whitespace-nowrap">
+                                    {contact.source ? (
+                                        <Badge variant={getSourceBadgeVariant(contact.source)} className="text-xs">
+                                            {contact.source}
+                                        </Badge>
+                                    ) : (
+                                        <span className="text-gray-400 text-sm">-</span>
+                                    )}
+                                </td>
+                                <td className="px-4 py-3 whitespace-nowrap">
+                                    <div className="text-sm text-gray-500">
+                                        {formatDate(contact.created_at)}
+                                    </div>
+                                </td>
+                                <td className="px-4 py-3 whitespace-nowrap">
+                                    <div className="flex items-center space-x-1">
+                                        <Button
+                                            variant="ghost"
+                                            size="xs"
+                                            icon={<Edit className="w-3 h-3" />}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                onEditContact(contact.id);
+                                            }}
+                                            className="opacity-0 group-hover:opacity-100 transition-opacity"
+                                            title="Editar contacto"
+                                        />
+                                        <Button
+                                            variant="ghost"
+                                            size="xs"
+                                            icon={<Trash2 className="w-3 h-3" />}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                if (window.confirm(`¿Eliminar a ${contact.name}?`)) {
+                                                    handleDeleteContact(contact.id);
+                                                }
+                                            }}
+                                            className="opacity-0 group-hover:opacity-100 transition-opacity text-red-600 hover:text-red-700"
+                                            title="Eliminar contacto"
+                                        />
+                                    </div>
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+        </Card>
+    );
+
+    if (loading) {
+        return (
+            <div className="flex items-center justify-center min-h-64">
+                <div className="text-center">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-600 mx-auto mb-4"></div>
+                    <p className="text-gray-600">Cargando contactos...</p>
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <div className="space-y-6">
+            <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
+                <div>
+                    <h1 className="text-2xl font-bold text-gray-900">Contactos</h1>
+                    <p className="text-gray-600">
+                        {totalContacts} contactos totales
+                        {getActiveFiltersCount() > 0 && ` • ${getActiveFiltersCount()} filtro${getActiveFiltersCount() !== 1 ? 's' : ''} activo${getActiveFiltersCount() !== 1 ? 's' : ''}`}
+                    </p>
+                </div>
+                <div className="flex items-center space-x-2">
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        icon={<Upload className="w-4 h-4" />}
+                        onClick={handleImportContacts}
+                    >
+                        Importar
+                    </Button>
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        icon={<Download className="w-4 h-4" />}
+                        onClick={handleExportContacts}
+                    >
+                        Exportar
+                    </Button>
+                    <Button onClick={onCreateContact} icon={<UserPlus className="w-4 h-4" />}>
+                        Nuevo Contacto
+                    </Button>
+                </div>
+            </div>
+
+            <Card className="p-4">
+                <div className="flex flex-col lg:flex-row gap-4">
+                    <div className="flex-1 relative">
+                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                        <input
+                            type="text"
+                            placeholder="Buscar cliente..."
+                            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                        />
+                    </div>
+
+                    <Select
+                        value={selectedSource}
+                        onChange={(e) => setSelectedSource(e.target.value)}
+                        className="lg:w-48"
+                    >
+                        <option value="">Fuente</option>
+                        <option value="Referido">Referido</option>
+                        <option value="Sitio Web">Sitio Web</option>
+                        <option value="Facebook Ads">Facebook Ads</option>
+                        <option value="Google Ads">Google Ads</option>
+                        <option value="WhatsApp">WhatsApp</option>
+                        <option value="Instagram">Instagram</option>
+                        <option value="LinkedIn">LinkedIn</option>
+                    </Select>
+
+                    {getActiveFiltersCount() > 0 && (
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={clearAllFilters}
+                            className="text-red-600 hover:text-red-700"
+                        >
+                            Limpiar
+                        </Button>
+                    )}
+                </div>
+            </Card>
+
+            <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-4">
+                    <span className="text-sm text-gray-600">
+                        {contacts.length} de {totalContacts} contactos
+                    </span>
+                </div>
+                
+                <div className="flex items-center space-x-2">
+                    <Button
+                        variant={viewMode === 'cards' ? 'primary' : 'outline'}
+                        size="sm"
+                        onClick={() => setViewMode('cards')}
+                    >
+                        Tarjetas
+                    </Button>
+                    <Button
+                        variant={viewMode === 'table' ? 'primary' : 'outline'}
+                        size="sm"
+                        onClick={() => setViewMode('table')}
+                    >
+                        Tabla
+                    </Button>
+                </div>
+            </div>
+
+            {contacts.length === 0 ? (
+                <Card className="p-8 text-center">
+                    <Users className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">
+                        {getActiveFiltersCount() > 0 ? 'No se encontraron contactos' : 'No hay contactos'}
+                    </h3>
+                    <p className="text-gray-600 mb-4">
+                        {getActiveFiltersCount() > 0 
+                            ? 'Intenta ajustar los filtros para encontrar contactos' 
+                            : 'Comienza agregando tu primer contacto'
+                        }
+                    </p>
+                    {getActiveFiltersCount() > 0 ? (
+                        <Button onClick={clearAllFilters} variant="outline">
+                            Limpiar filtros
+                        </Button>
+                    ) : (
+                        <Button onClick={onCreateContact} icon={<UserPlus className="w-4 h-4" />}>
+                            Crear Contacto
+                        </Button>
+                    )}
+                </Card>
+            ) : viewMode === 'table' ? (
+                renderTableView()
+            ) : (
+                <div className="grid gap-4">
+                    {contacts.map((contact) => (
+                        <Card key={contact.id} className="p-4 hover:shadow-md transition-shadow cursor-pointer group" onClick={() => onSelectContact(contact.id)}>
+                            <div className="flex items-start justify-between">
+                                <div className="flex items-start space-x-4 flex-1">
+                                    <div className="w-12 h-12 bg-orange-100 rounded-full flex items-center justify-center">
+                                        <User className="w-6 h-6 text-orange-600" />
+                                    </div>
+                                    
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-start justify-between">
+                                            <div className="flex-1">
+                                                <h3 className="text-lg font-semibold text-gray-900 mb-1">
+                                                    {contact.name}
+                                                </h3>
+                                                
+                                                <div className="flex flex-wrap items-center gap-4 text-sm text-gray-600 mb-2">
+                                                    {contact.email && (
+                                                        <div className="flex items-center">
+                                                            <Mail className="w-4 h-4 mr-1" />
+                                                            {contact.email}
+                                                        </div>
+                                                    )}
+                                                    {contact.phone && (
+                                                        <div className="flex items-center">
+                                                            <Phone className="w-4 h-4 mr-1" />
+                                                            {contact.phone}
+                                                        </div>
+                                                    )}
+                                                    {contact.cities?.name && (
+                                                        <div className="flex items-center">
+                                                            <MapPin className="w-4 h-4 mr-1" />
+                                                            {contact.cities.name}
+                                                        </div>
+                                                    )}
+                                                </div>
+
+                                                <div className="flex flex-wrap items-center gap-2 mb-2">
+                                                    {contact.source && (
+                                                        <Badge variant={getSourceBadgeVariant(contact.source)}>
+                                                            {contact.source}
+                                                        </Badge>
+                                                    )}
+                                                </div>
+
+                                                {contact.notes && (
+                                                    <p className="text-sm text-gray-600 line-clamp-2">
+                                                        {contact.notes}
+                                                    </p>
+                                                )}
+                                            </div>
+
+                                            <div className="text-right text-sm text-gray-500 ml-4">
+                                                <p>Creado {formatDate(contact.created_at)}</p>
+                                                {contact.users && (
+                                                    <p className="text-xs">
+                                                        por {contact.users.first_name} {contact.users.last_name}
+                                                    </p>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="flex items-center space-x-2 ml-4 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        icon={<Eye className="w-4 h-4" />}
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            onSelectContact(contact.id);
+                                        }}
+                                    >
+                                        Ver
+                                    </Button>
+                                </div>
+                            </div>
+                        </Card>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+};
+
+// Detalle de Contacto
+const ContactDetail = ({ contactId, onBack, onEdit }) => {
+    const [contact, setContact] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+
+    useEffect(() => {
+        const fetchContactDetail = async () => {
+            try {
+                setLoading(true);
+                console.log('📋 Cargando detalle del contacto:', contactId);
+                
+                const { data, error } = await supabase
+                    .from('contacts')
+                    .select('*')
+                    .eq('id', contactId)
+                    .single();
+
+                if (error) {
+                    console.error('❌ Error cargando contacto:', error);
+                    throw error;
+                }
+                
+                console.log('✅ Contacto cargado:', data);
+                
+                if (data) {
+                    if (data.city_id) {
+                        try {
+                            const { data: cityData } = await supabase
+                                .from('cities')
+                                .select('id, name, country')
+                                .eq('id', data.city_id)
+                                .single();
+                            
+                            if (cityData) {
+                                data.cities = cityData;
+                                console.log('🏙️ Ciudad cargada:', cityData.name);
+                            }
+                        } catch (cityError) {
+                            console.log('⚠️ No se pudo cargar ciudad:', cityError);
+                        }
+                    }
+                    
+                    if (data.created_by) {
+                        try {
+                            const { data: userData } = await supabase
+                                .from('users')
+                                .select('first_name, last_name, email')
+                                .eq('id', data.created_by)
+                                .single();
+                            
+                            if (userData) {
+                                data.users = userData;
+                                console.log('👤 Usuario creador cargado:', userData.first_name);
+                            }
+                        } catch (userError) {
+                            console.log('⚠️ No se pudo cargar usuario:', userError);
+                        }
+                    }
+                }
+                
+                setContact(data);
+            } catch (err) {
+                console.error('❌ Error general:', err);
+                setError(err.message || 'Error al cargar el contacto');
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        if (contactId) fetchContactDetail();
+    }, [contactId]);
+
+    const formatDate = (date) => {
+        if (!date) return 'No definida';
+        return new Date(date).toLocaleDateString('es-DO', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+    };
+
+    if (loading) {
+        return (
+            <div className="flex items-center justify-center min-h-screen">
+                <div className="text-center">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-600 mx-auto mb-4"></div>
+                    <p className="text-gray-600">Cargando contacto...</p>
+                </div>
+            </div>
+        );
+    }
+
+    if (error || !contact) {
+        return (
+            <div className="flex items-center justify-center min-h-screen">
+                <div className="text-center">
+                    <AlertCircle className="w-12 h-12 text-red-400 mx-auto mb-4" />
+                    <p className="text-gray-500 mb-4">{error || 'No se encontró el contacto'}</p>
+                    <Button onClick={onBack} variant="outline">
+                        <ArrowLeft className="w-4 h-4 mr-2" />
+                        Volver a la lista
+                    </Button>
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <div className="min-h-screen bg-gray-50">
+            <div className="bg-white border-b border-gray-200 px-4 py-4">
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-4">
+                        <Button
+                            variant="ghost"
+                            onClick={onBack}
+                            icon={<ArrowLeft className="w-4 h-4" />}
+                            size="sm"
+                        >
+                            Volver
+                        </Button>
+                        <div className="flex items-center space-x-4">
+                            <div className="w-12 h-12 bg-orange-100 rounded-full flex items-center justify-center">
+                                <User className="w-6 h-6 text-orange-600" />
+                            </div>
+                            <div>
+                                <h1 className="text-xl font-bold text-gray-900">{contact.name}</h1>
+                                <p className="text-sm text-gray-600">{contact.email}</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="flex items-center space-x-2">
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            icon={<Edit className="w-4 h-4" />}
+                            onClick={() => onEdit(contact.id)}
+                        >
+                            Editar
+                        </Button>
+                    </div>
+                </div>
+            </div>
+
+            <div className="p-4 max-w-7xl mx-auto">
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div className="lg:col-span-2 space-y-6">
+                        <Card title="Información de Contacto" className="p-6">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div>
+                                    <h4 className="font-medium text-gray-900 mb-4">Datos Personales</h4>
+                                    <div className="space-y-3">
+                                        <div className="flex items-center">
+                                            <User className="w-4 h-4 text-gray-400 mr-3" />
+                                            <div>
+                                                <p className="text-sm text-gray-600">Nombre completo</p>
+                                                <p className="font-medium">{contact.name}</p>
+                                            </div>
+                                        </div>
+                                        
+                                        {contact.document_number && (
+                                            <div className="flex items-center">
+                                                <FileText className="w-4 h-4 text-gray-400 mr-3" />
+                                                <div>
+                                                    <p className="text-sm text-gray-600">Cédula</p>
+                                                    <p className="font-medium">{contact.document_number}</p>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <h4 className="font-medium text-gray-900 mb-4">Contacto</h4>
+                                    <div className="space-y-3">
+                                        {contact.email && (
+                                            <div className="flex items-center">
+                                                <Mail className="w-4 h-4 text-gray-400 mr-3" />
+                                                <div>
+                                                    <p className="text-sm text-gray-600">Email</p>
+                                                    <p className="font-medium">{contact.email}</p>
+                                                </div>
+                                            </div>
+                                        )}
+                                        
+                                        {contact.phone && (
+                                            <div className="flex items-center">
+                                                <Phone className="w-4 h-4 text-gray-400 mr-3" />
+                                                <div>
+                                                    <p className="text-sm text-gray-600">Teléfono</p>
+                                                    <p className="font-medium">{contact.phone}</p>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {contact.address && (
+                                <div className="mt-6 pt-6 border-t border-gray-200">
+                                    <div className="flex items-start">
+                                        <MapPin className="w-4 h-4 text-gray-400 mr-3 mt-1" />
+                                        <div>
+                                            <p className="text-sm text-gray-600">Dirección</p>
+                                            <p className="font-medium">{contact.address}</p>
+                                            {contact.cities && (
+                                                <p className="text-sm text-gray-500 mt-1">
+                                                    {contact.cities.name}, {contact.cities.country}
+                                                </p>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {contact.notes && (
+                                <div className="mt-6 pt-6 border-t border-gray-200">
+                                    <div className="flex items-start">
+                                        <MessageSquare className="w-4 h-4 text-gray-400 mr-3 mt-1" />
+                                        <div>
+                                            <p className="text-sm text-gray-600">Notas</p>
+                                            <p className="font-medium">{contact.notes}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                        </Card>
+                    </div>
+
+                    <div className="space-y-4">
+                        <Card className="p-4">
+                            <h3 className="font-semibold text-gray-900 mb-4">Información Rápida</h3>
+                            
+                            <div className="space-y-3">
+                                {contact.source && (
+                                    <div className="flex justify-between">
+                                        <span className="text-gray-600">Fuente</span>
+                                        <Badge variant="info">{contact.source}</Badge>
+                                    </div>
+                                )}
+                                
+                                <div className="flex justify-between">
+                                    <span className="text-gray-600">Creado</span>
+                                    <span className="text-sm text-gray-500">
+                                        {formatDate(contact.created_at).split(',')[0]}
+                                    </span>
+                                </div>
+
+                                {contact.users && (
+                                    <div className="flex justify-between">
+                                        <span className="text-gray-600">Creado por</span>
+                                        <span className="text-sm text-gray-500">
+                                            {contact.users.first_name} {contact.users.last_name}
+                                        </span>
+                                    </div>
+                                )}
+                            </div>
+                        </Card>
+
+                        <Card className="p-4">
+                            <h3 className="font-semibold text-gray-900 mb-4">Acciones Rápidas</h3>
+                            <div className="space-y-2">
+                                <Button variant="outline" size="sm" className="w-full justify-start">
+                                    <Phone className="w-4 h-4 mr-2" />
+                                    Llamar
+                                </Button>
+                                <Button variant="outline" size="sm" className="w-full justify-start">
+                                    <Mail className="w-4 h-4 mr-2" />
+                                    Enviar Email
+                                </Button>
+                                <Button variant="outline" size="sm" className="w-full justify-start">
+                                    <MessageSquare className="w-4 h-4 mr-2" />
+                                    WhatsApp
+                                </Button>
+                            </div>
+                        </Card>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// Formulario de Contacto
+const ContactForm = ({ contactId = null, onBack, onSave }) => {
+    const [formData, setFormData] = useState({
+        name: '',
+        email: '',
+        phone: '',
+        document_number: '',
+        address: '',
+        city_id: '',
+        notes: '',
+        source: ''
+    });
+    const [cities, setCities] = useState([]);
+    const [loading, setLoading] = useState(false);
+    const [errors, setErrors] = useState({});
+
+    useEffect(() => {
+        const fetchCities = async () => {
+            try {
+                const { data, error } = await supabase.from('cities').select('id, name').order('name');
+                setCities(error ? [
+                    { id: '1', name: 'Santo Domingo' },
+                    { id: '2', name: 'Santiago' },
+                    { id: '3', name: 'La Romana' }
+                ] : data || []);
+            } catch (err) {
+                setCities([{ id: '1', name: 'Santo Domingo' }]);
+            }
+        };
+
+        fetchCities();
+
+        if (contactId) {
+            const fetchContact = async () => {
+                try {
+                    const { data, error } = await supabase.from('contacts').select('*').eq('id', contactId).single();
+                    if (!error && data) {
+                        setFormData({
+                            name: data.name || '',
+                            email: data.email || '',
+                            phone: data.phone || '',
+                            document_number: data.document_number || '',
+                            address: data.address || '',
+                            city_id: data.city_id || '',
+                            notes: data.notes || '',
+                            source: data.source || ''
+                        });
+                    }
+                } catch (err) {
+                    console.error('Error fetching contact for edit:', err);
+                }
+            };
+            fetchContact();
+        }
+    }, [contactId]);
+
+    const handleSubmit = async () => {
+        setLoading(true);
+        setErrors({});
+
+        try {
+            const newErrors = {};
+            if (!formData.name.trim()) newErrors.name = 'El nombre es requerido';
+            if (formData.email && !/\S+@\S+\.\S+/.test(formData.email)) {
+                newErrors.email = 'Email inválido';
+            }
+
+            if (Object.keys(newErrors).length > 0) {
+                setErrors(newErrors);
+                return;
+            }
+
+            const dataToSend = {};
+            if (formData.name.trim()) dataToSend.name = formData.name.trim();
+            if (formData.email.trim()) dataToSend.email = formData.email.trim();
+            if (formData.phone.trim()) dataToSend.phone = formData.phone.trim();
+            if (formData.document_number.trim()) dataToSend.document_number = formData.document_number.trim();
+            if (formData.address.trim()) dataToSend.address = formData.address.trim();
+            if (formData.city_id) dataToSend.city_id = formData.city_id;
+            if (formData.notes.trim()) dataToSend.notes = formData.notes.trim();
+            if (formData.source) dataToSend.source = formData.source;
+
+            if (!contactId) {
+                const { data, error } = await supabase.from('contacts').insert(dataToSend).select();
+                if (error) throw new Error(error.message || 'Error al crear el contacto');
+                console.log('Contact created successfully:', data);
+            } else {
+                const { data, error } = await supabase.from('contacts').update(dataToSend).eq('id', contactId).select();
+                if (error) throw new Error(error.message || 'Error al actualizar el contacto');
+                console.log('Contact updated successfully:', data);
+            }
+            
+            if (onSave) onSave(formData);
+            onBack();
+        } catch (error) {
+            setErrors({ general: error.message || 'Error al guardar el contacto' });
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleChange = (field, value) => {
+        setFormData(prev => ({ ...prev, [field]: value }));
+        if (errors[field]) setErrors(prev => ({ ...prev, [field]: '' }));
+    };
+
+    return (
+        <div className="min-h-screen bg-gray-50">
+            <div className="bg-white border-b border-gray-200 px-4 py-4">
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-4">
+                        <Button variant="ghost" onClick={onBack} icon={<ArrowLeft className="w-4 h-4" />} size="sm">
+                            Volver
+                        </Button>
+                        <div>
+                            <h1 className="text-xl font-bold text-gray-900">
+                                {contactId ? 'Editar Contacto' : 'Nuevo Contacto'}
+                            </h1>
+                            <p className="text-sm text-gray-600">
+                                {contactId ? 'Modifica la información del contacto' : 'Agrega un nuevo contacto a tu base de datos'}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div className="p-4 max-w-4xl mx-auto">
+                <Card>
+                    <div className="p-6 space-y-6">
+                        {errors.general && (
+                            <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+                                <p className="text-red-600 text-sm">{errors.general}</p>
+                            </div>
+                        )}
+
+                        <div>
+                            <h3 className="text-lg font-semibold text-gray-900 mb-4">Información Básica</h3>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <Input
+                                    label="Nombre completo *"
+                                    value={formData.name}
+                                    onChange={(e) => handleChange('name', e.target.value)}
+                                    error={errors.name}
+                                    placeholder="Ej: Juan Pérez González"
+                                />
+                                <Input
+                                    label="Cédula"
+                                    value={formData.document_number}
+                                    onChange={(e) => handleChange('document_number', e.target.value)}
+                                    placeholder="Ej: 001-1234567-8"
+                                />
+                            </div>
+                        </div>
+
+                        <div>
+                            <h3 className="text-lg font-semibold text-gray-900 mb-4">Información de Contacto</h3>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <Input
+                                    label="Email"
+                                    type="email"
+                                    value={formData.email}
+                                    onChange={(e) => handleChange('email', e.target.value)}
+                                    error={errors.email}
+                                    placeholder="ejemplo@email.com"
+                                />
+                                <Input
+                                    label="Teléfono"
+                                    value={formData.phone}
+                                    onChange={(e) => handleChange('phone', e.target.value)}
+                                    placeholder="Ej: +1 809-555-0123"
+                                />
+                            </div>
+                        </div>
+
+                        <div>
+                            <h3 className="text-lg font-semibold text-gray-900 mb-4">Dirección</h3>
+                            <div className="space-y-4">
+                                <Input
+                                    label="Dirección"
+                                    value={formData.address}
+                                    onChange={(e) => handleChange('address', e.target.value)}
+                                    placeholder="Ej: Av. Winston Churchill #123"
+                                />
+                                <Select
+                                    label="Ciudad"
+                                    value={formData.city_id}
+                                    onChange={(e) => handleChange('city_id', e.target.value)}
+                                >
+                                    <option value="">Seleccionar ciudad</option>
+                                    {cities.map(city => (
+                                        <option key={city.id} value={city.id}>{city.name}</option>
+                                    ))}
+                                </Select>
+                            </div>
+                        </div>
+
+                        <div>
+                            <h3 className="text-lg font-semibold text-gray-900 mb-4">Información Adicional</h3>
+                            <div className="space-y-4">
+                                <Select
+                                    label="Fuente"
+                                    value={formData.source}
+                                    onChange={(e) => handleChange('source', e.target.value)}
+                                >
+                                    <option value="">Seleccionar fuente</option>
+                                    <option value="Referido">Referido</option>
+                                    <option value="Sitio Web">Sitio Web</option>
+                                    <option value="Facebook Ads">Facebook Ads</option>
+                                    <option value="Google Ads">Google Ads</option>
+                                    <option value="WhatsApp">WhatsApp</option>
+                                    <option value="Instagram">Instagram</option>
+                                    <option value="LinkedIn">LinkedIn</option>
+                                </Select>
+                                <Textarea
+                                    label="Notas"
+                                    value={formData.notes}
+                                    onChange={(e) => handleChange('notes', e.target.value)}
+                                    placeholder="Información adicional sobre el contacto"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="flex space-x-4 pt-6 border-t border-gray-200">
+                            <Button
+                                onClick={handleSubmit}
+                                disabled={loading}
+                                icon={loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : null}
+                            >
+                                {loading ? 'Guardando...' : (contactId ? 'Actualizar' : 'Crear Contacto')}
+                            </Button>
+                            <Button variant="outline" onClick={onBack} disabled={loading}>
+                                Cancelar
+                            </Button>
+                        </div>
+                    </div>
+                </Card>
+            </div>
+        </div>
+    );
+};
+
+// Componente principal
+const ContactsManagement = () => {
+    const [currentView, setCurrentView] = useState('list');
+    const [selectedContactId, setSelectedContactId] = useState(null);
+    const [showEditModal, setShowEditModal] = useState(false);
+    const [contactToEdit, setContactToEdit] = useState(null);
+
+    const handleSelectContact = (contactId) => {
+        setSelectedContactId(contactId);
+        setCurrentView('detail');
+    };
+
+    const handleCreateContact = () => {
+        setSelectedContactId(null);
+        setCurrentView('create');
+    };
+
+    const handleEditContact = async (contactId) => {
+        try {
+            console.log('📝 Iniciando edición de contacto:', contactId);
+            
+            const { data, error } = await supabase
+                .from('contacts')
+                .select('*')
+                .eq('id', contactId)
+                .single();
+
+            if (error) {
+                console.error('❌ Error cargando contacto para editar:', error);
+                alert('Error al cargar el contacto');
+                return;
+            }
+
+            console.log('✅ Contacto cargado para edición:', data);
+            setContactToEdit(data);
+            setShowEditModal(true);
+        } catch (err) {
+            console.error('❌ Error general:', err);
+            alert('Error al cargar el contacto');
+        }
+    };
+
+    const handleEditFromDetail = (contactId) => {
+        handleEditContact(contactId);
+    };
+
+    const handleCloseEditModal = () => {
+        setShowEditModal(false);
+        setContactToEdit(null);
+    };
+
+    const handleSaveContact = (updatedContact) => {
+        console.log('✅ Contacto guardado exitosamente:', updatedContact);
+        setShowEditModal(false);
+        setContactToEdit(null);
+        
+        if (currentView === 'detail') {
+            setCurrentView('list');
+            setTimeout(() => {
+                setSelectedContactId(updatedContact.id);
+                setCurrentView('detail');
+            }, 100);
+        }
+    };
+
+    const handleBack = () => {
+        setCurrentView('list');
+        setSelectedContactId(null);
+    };
+
+    const handleSave = (contactData) => {
+        console.log('Guardando contacto:', contactData);
+        setCurrentView('list');
+    };
+
+    return (
+        <div className="min-h-screen bg-gray-50">
+            {currentView === 'list' && (
+                <ContactsList
+                    onSelectContact={handleSelectContact}
+                    onCreateContact={handleCreateContact}
+                    onEditContact={handleEditContact}
+                />
+            )}
+
+            {currentView === 'detail' && selectedContactId && (
+                <ContactDetail
+                    contactId={selectedContactId}
+                    onBack={handleBack}
+                    onEdit={handleEditFromDetail}
+                />
+            )}
+
+            {(currentView === 'create' || currentView === 'edit') && (
+                <ContactForm
+                    contactId={currentView === 'edit' ? selectedContactId : null}
+                    onBack={handleBack}
+                    onSave={handleSave}
+                />
+            )}
+
+            {showEditModal && contactToEdit && (
+                <ContactEditModal
+                    contact={contactToEdit}
+                    onClose={handleCloseEditModal}
+                    onSave={handleSaveContact}
+                />
+            )}
+        </div>
+    );
+};
+
+export default ContactsManagement;

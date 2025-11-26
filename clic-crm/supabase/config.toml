@@ -1,0 +1,5 @@
+# Supabase Configuration File
+# Only needed for local development with supabase start
+# For deployment, only project ref is used
+
+# This file can be minimal for deployment
