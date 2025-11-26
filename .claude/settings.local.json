@@ -3,7 +3,9 @@
     "allow": [
       "Bash(supabase functions deploy:*)",
       "Bash(npm run dev:*)",
-      "Bash(git checkout:*)"
+      "Bash(git checkout:*)",
+      "Bash(git restore:*)",
+      "Read(//c/Users/Rene Castillo/EACLIC/**)"
     ],
     "deny": [],
     "ask": []
